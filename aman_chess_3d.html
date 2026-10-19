@@ -1,0 +1,2701 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aman Chess 3D — 3D WebGL Engine Developed & Designed by Aman</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --board-light: #e2e8f0;
+            --board-dark: #475569;
+            --board-highlight: rgba(250, 204, 21, 0.45);
+            --board-selected: rgba(56, 189, 248, 0.55);
+            --coord-light: #475569;
+            --coord-dark: #e2e8f0;
+        }
+
+        [data-theme="emerald"] {
+            --board-light: #eeeed2;
+            --board-dark: #769656;
+            --board-highlight: rgba(246, 246, 105, 0.65);
+            --board-selected: rgba(186, 202, 43, 0.8);
+            --coord-light: #769656;
+            --coord-dark: #eeeed2;
+        }
+
+        [data-theme="wood"] {
+            --board-light: #f0d9b5;
+            --board-dark: #b58863;
+            --board-highlight: rgba(205, 210, 106, 0.6);
+            --board-selected: rgba(130, 151, 105, 0.75);
+            --coord-light: #b58863;
+            --coord-dark: #f0d9b5;
+        }
+
+        [data-theme="marble"] {
+            --board-light: #f8fafc;
+            --board-dark: #334155;
+            --board-highlight: rgba(250, 204, 21, 0.55);
+            --board-selected: rgba(56, 189, 248, 0.65);
+            --coord-light: #334155;
+            --coord-dark: #f8fafc;
+        }
+
+        [data-theme="cyber"] {
+            --board-light: #1e293b;
+            --board-dark: #090d16;
+            --board-highlight: rgba(236, 72, 153, 0.55);
+            --board-selected: rgba(6, 182, 212, 0.65);
+            --coord-light: #38bdf8;
+            --coord-dark: #f472b6;
+        }
+
+        [data-theme="walnut"] {
+            --board-light: #e7d3b8;
+            --board-dark: #5c3a21;
+            --board-highlight: rgba(245, 158, 11, 0.55);
+            --board-selected: rgba(16, 185, 129, 0.65);
+            --coord-light: #5c3a21;
+            --coord-dark: #e7d3b8;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        .mono {
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        /* 3D Viewport Wrapper */
+        .viewport-container {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 1 / 1;
+            max-width: min(74vh, 100%);
+            border-radius: 0.9rem;
+            overflow: hidden;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.85), 0 0 0 2px rgba(245, 158, 11, 0.25);
+            background: radial-gradient(circle at center, #1e293b 0%, #090d16 100%);
+        }
+
+        #webglCanvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+            cursor: grab;
+            touch-action: none;
+        }
+
+        #webglCanvas:active {
+            cursor: grabbing;
+        }
+
+        /* 2D Fallback / Classic Board Grid */
+        .chess-board-2d {
+            display: grid;
+            grid-template-columns: repeat(8, 1fr);
+            grid-template-rows: repeat(8, 1fr);
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            inset: 0;
+            z-index: 5;
+        }
+
+        .square {
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            height: 100%;
+            cursor: pointer;
+            transition: background-color 0.12s ease;
+        }
+
+        .square.light { background-color: var(--board-light); }
+        .square.dark { background-color: var(--board-dark); }
+        .square.last-move { background-color: var(--board-highlight) !important; }
+        .square.selected { background-color: var(--board-selected) !important; }
+        
+        .square.in-check {
+            background: radial-gradient(circle, rgba(239,68,68,0.9) 0%, rgba(220,38,38,0.65) 55%, transparent 90%), var(--board-light) !important;
+        }
+        .square.dark.in-check {
+            background: radial-gradient(circle, rgba(239,68,68,0.9) 0%, rgba(220,38,38,0.65) 55%, transparent 90%), var(--board-dark) !important;
+        }
+
+        .move-dot {
+            width: 28%;
+            height: 28%;
+            border-radius: 9999px;
+            background-color: rgba(15, 23, 42, 0.38);
+            pointer-events: none;
+        }
+
+        .capture-ring {
+            position: absolute;
+            inset: 6%;
+            border: 5px solid rgba(239, 68, 68, 0.55);
+            border-radius: 9999px;
+            pointer-events: none;
+        }
+
+        .coord-rank {
+            position: absolute;
+            top: 4px;
+            left: 5px;
+            font-size: clamp(0.6rem, 1.3vw, 0.78rem);
+            font-weight: 700;
+            line-height: 1;
+            pointer-events: none;
+        }
+
+        .coord-file {
+            position: absolute;
+            bottom: 3px;
+            right: 5px;
+            font-size: clamp(0.6rem, 1.3vw, 0.78rem);
+            font-weight: 700;
+            line-height: 1;
+            pointer-events: none;
+        }
+
+        .square.light .coord-rank, .square.light .coord-file { color: var(--coord-light); }
+        .square.dark .coord-rank, .square.dark .coord-file { color: var(--coord-dark); }
+
+        .piece-svg {
+            width: 84%;
+            height: 84%;
+            z-index: 10;
+            filter: drop-shadow(0 3px 3px rgba(0, 0, 0, 0.38));
+            pointer-events: none;
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0f172a;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #475569;
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col justify-between overflow-x-hidden" data-theme="wood">
+
+    <!-- Top Navigation Bar -->
+    <header class="border-b border-slate-800/80 bg-slate-900/75 backdrop-blur-md sticky top-0 z-30">
+        <div class="max-w-7xl mx-auto px-3 sm:px-6 py-2.5 flex flex-wrap items-center justify-between gap-2.5">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-400 via-amber-500 to-orange-600 flex items-center justify-center shadow-lg shadow-amber-500/25 text-slate-950 font-black text-xl border border-amber-300/40">
+                    ♔
+                </div>
+                <div>
+                    <div class="flex items-center gap-2 flex-wrap">
+                        <h1 class="font-extrabold text-base sm:text-xl tracking-tight text-white flex items-center gap-1.5">
+                            Aman Chess <span class="text-amber-400">3D</span>
+                        </h1>
+                        <span id="headerModeBadge" class="text-[10px] sm:text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/30">VS AMANBOT AI</span>
+                        <span class="hidden md:inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/25">
+                            ⚡ Built by Aman
+                        </span>
+                    </div>
+                    <p class="text-[11px] text-slate-400 font-medium">3D WebGL Engine • Developed &amp; Engineered by <span class="text-amber-400 font-semibold">Aman</span></p>
+                </div>
+            </div>
+
+            <!-- Quick Header Controls -->
+            <div class="flex items-center gap-2 flex-wrap">
+                <!-- 3D / 2D View Switcher -->
+                <div class="flex items-center bg-slate-800/95 rounded-lg p-0.5 border border-slate-700/80">
+                    <button id="view3DBtn" onclick="setRenderDimension('3d')" class="px-2.5 py-1 rounded-md text-xs font-bold transition bg-amber-500 text-slate-950 shadow">
+                        🧊 3D WebGL
+                    </button>
+                    <button id="view2DBtn" onclick="setRenderDimension('2d')" class="px-2.5 py-1 rounded-md text-xs font-bold transition text-slate-300 hover:text-white">
+                        ♟️ 2D Flat
+                    </button>
+                </div>
+
+                <!-- 3D Material Theme Selector -->
+                <div class="flex items-center bg-slate-800/90 rounded-lg p-1 border border-slate-700/70" title="3D Board & Piece Material Theme">
+                    <span class="text-[11px] text-slate-400 px-1.5 hidden xl:inline">Material:</span>
+                    <button onclick="setBoardTheme('wood')" class="w-5 h-5 rounded-md bg-[#b58863] border-2 border-[#f0d9b5] hover:scale-110 transition" title="Classic Rosewood & Brass"></button>
+                    <button onclick="setBoardTheme('marble')" class="w-5 h-5 rounded-md bg-[#334155] border-2 border-[#f8fafc] hover:scale-110 transition ml-1" title="Royal Marble & Gold"></button>
+                    <button onclick="setBoardTheme('emerald')" class="w-5 h-5 rounded-md bg-[#769656] border-2 border-[#eeeed2] hover:scale-110 transition ml-1" title="Emerald Tournament"></button>
+                    <button onclick="setBoardTheme('walnut')" class="w-5 h-5 rounded-md bg-[#5c3a21] border-2 border-[#e7d3b8] hover:scale-110 transition ml-1" title="Walnut Grandmaster"></button>
+                    <button onclick="setBoardTheme('cyber')" class="w-5 h-5 rounded-md bg-[#090d16] border-2 border-[#38bdf8] hover:scale-110 transition ml-1" title="Obsidian Cyber Neon"></button>
+                </div>
+
+                <!-- Sound Toggle -->
+                <button id="soundToggleBtn" onclick="toggleSound()" class="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 transition flex items-center gap-1 text-xs font-medium" title="Toggle Synthesized Audio">
+                    <span id="soundIcon">🔊</span>
+                </button>
+
+                <!-- About Creator Button -->
+                <button onclick="openCreatorModal()" class="py-1.5 px-3 rounded-lg bg-gradient-to-r from-amber-500/20 to-orange-500/20 hover:from-amber-500/30 hover:to-orange-500/30 border border-amber-500/40 text-amber-300 transition flex items-center gap-1.5 text-xs font-bold shadow-sm" title="About Aman Chess 3D">
+                    <span>👨‍💻</span>
+                    <span>By Aman</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Container -->
+    <main class="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 py-3 sm:py-5 grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+
+        <!-- Left / Center Column: 3D Chessboard Viewport Area -->
+        <div class="lg:col-span-7 xl:col-span-8 flex flex-col items-center justify-center w-full">
+
+            <!-- Top Player Card (Opponent / Top Side) -->
+            <div class="w-full max-w-[min(74vh,100%)] mb-2 bg-slate-900/90 border border-slate-800 rounded-xl px-3.5 py-2 flex items-center justify-between shadow-md">
+                <div class="flex items-center gap-2.5">
+                    <div id="topPlayerAvatar" class="w-9 h-9 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center text-lg font-bold">
+                        🤖
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <span id="topPlayerName" class="font-semibold text-sm text-slate-100">AmanBot AI</span>
+                            <span id="topPlayerBadge" class="text-[10px] font-semibold px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700">Black</span>
+                            <span id="aiThinkingBadge" class="hidden text-[10px] font-semibold px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 animate-pulse">AmanBot Thinking...</span>
+                        </div>
+                        <div class="flex items-center gap-1.5 min-h-[18px] mt-0.5">
+                            <div id="topCapturedPieces" class="flex items-center -space-x-1.5 overflow-hidden"></div>
+                            <span id="topMaterialDiff" class="text-xs font-bold text-emerald-400 mono"></span>
+                        </div>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2.5">
+                    <div id="topClockDisplay" class="hidden px-2.5 py-1 rounded-lg mono font-bold text-sm bg-slate-950 border border-slate-700 text-slate-300 tracking-wider">
+                        10:00
+                    </div>
+                    <div id="topTurnDot" class="w-3 h-3 rounded-full bg-slate-700 transition-all duration-300"></div>
+                </div>
+            </div>
+
+            <!-- Interactive 3D WebGL & 2D Viewport Container -->
+            <div id="viewportContainer" class="viewport-container">
+                <!-- Three.js 3D WebGL Canvas -->
+                <canvas id="webglCanvas" aria-label="Aman Chess 3D WebGL Board"></canvas>
+
+                <!-- 3D Camera Preset Floating Bar (Top Overlay inside 3D Viewport) -->
+                <div id="cameraOverlayBar" class="absolute top-2.5 left-2.5 right-2.5 flex items-center justify-between pointer-events-none z-10">
+                    <div class="pointer-events-auto flex items-center gap-1 bg-slate-950/80 backdrop-blur-md px-2 py-1 rounded-lg border border-slate-800/90 shadow-lg">
+                        <span class="text-[10px] font-bold uppercase tracking-wider text-amber-400 mr-1 hidden sm:inline">🎥 Cam:</span>
+                        <button onclick="setCameraPreset('white')" class="px-2 py-0.5 rounded text-[11px] font-semibold bg-slate-800/90 hover:bg-amber-500 hover:text-slate-950 text-slate-200 transition" title="White 3D Perspective">White</button>
+                        <button onclick="setCameraPreset('black')" class="px-2 py-0.5 rounded text-[11px] font-semibold bg-slate-800/90 hover:bg-amber-500 hover:text-slate-950 text-slate-200 transition" title="Black 3D Perspective">Black</button>
+                        <button onclick="setCameraPreset('overhead')" class="px-2 py-0.5 rounded text-[11px] font-semibold bg-slate-800/90 hover:bg-amber-500 hover:text-slate-950 text-slate-200 transition" title="Top-Down 3D Overhead">Top</button>
+                        <button onclick="setCameraPreset('side')" class="px-2 py-0.5 rounded text-[11px] font-semibold bg-slate-800/90 hover:bg-amber-500 hover:text-slate-950 text-slate-200 transition hidden sm:inline-block" title="Dramatic Side Angle">Cinema</button>
+                    </div>
+
+                    <div class="pointer-events-auto hidden sm:flex items-center gap-1.5 bg-slate-950/75 backdrop-blur-md px-2.5 py-1 rounded-lg border border-slate-800/80 text-[10px] text-slate-300">
+                        <span>🖱️ Drag: Orbit</span>
+                        <span>•</span>
+                        <span>🔍 Scroll: Zoom</span>
+                    </div>
+                </div>
+
+                <!-- 2D Classic Board (Hidden when in 3D mode) -->
+                <div id="chessBoard2D" class="chess-board-2d hidden" role="grid" aria-label="Aman Chess 2D Board"></div>
+            </div>
+
+            <!-- Bottom Player Card (Active Human / Bottom Side) -->
+            <div class="w-full max-w-[min(74vh,100%)] mt-2 bg-slate-900/90 border border-slate-800 rounded-xl px-3.5 py-2 flex items-center justify-between shadow-md">
+                <div class="flex items-center gap-2.5">
+                    <div id="bottomPlayerAvatar" class="w-9 h-9 rounded-lg bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-lg font-bold">
+                        👑
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <span id="bottomPlayerName" class="font-semibold text-sm text-slate-100">Aman</span>
+                            <span id="bottomPlayerBadge" class="text-[10px] font-semibold px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">White</span>
+                        </div>
+                        <div class="flex items-center gap-1.5 min-h-[18px] mt-0.5">
+                            <div id="bottomCapturedPieces" class="flex items-center -space-x-1.5 overflow-hidden"></div>
+                            <span id="bottomMaterialDiff" class="text-xs font-bold text-emerald-400 mono"></span>
+                        </div>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2.5">
+                    <div id="bottomClockDisplay" class="hidden px-2.5 py-1 rounded-lg mono font-bold text-sm bg-slate-950 border border-slate-700 text-slate-300 tracking-wider">
+                        10:00
+                    </div>
+                    <div id="bottomTurnDot" class="w-3 h-3 rounded-full bg-emerald-400 shadow-[0_0_10px_#34d399] transition-all duration-300"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Column: Game Controls, Status, and Move History -->
+        <aside class="lg:col-span-5 xl:col-span-4 w-full bg-slate-900/90 border border-slate-800 rounded-2xl p-4 flex flex-col gap-3 shadow-xl">
+            
+            <!-- Segmented Game Mode Selector -->
+            <div class="bg-slate-950 p-1 rounded-xl border border-slate-800 grid grid-cols-2 gap-1">
+                <button id="modeAiBtn" onclick="setGameMode('ai')" class="py-2 px-3 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 bg-amber-500 text-slate-950 shadow">
+                    <span>🤖</span> vs AmanBot (AI)
+                </button>
+                <button id="modePvpBtn" onclick="setGameMode('pvp')" class="py-2 px-3 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 text-slate-400 hover:text-slate-200">
+                    <span>👥</span> Pass &amp; Play (2P)
+                </button>
+            </div>
+
+            <!-- Game Status Banner -->
+            <div id="statusBanner" class="rounded-xl p-3 bg-slate-800/90 border border-slate-700/80 flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <div id="statusTurnColor" class="w-5 h-5 rounded-full bg-white border-2 border-slate-400 shadow-sm shrink-0"></div>
+                    <div>
+                        <div id="statusHeadline" class="text-sm font-bold text-white">White's Turn to Move</div>
+                        <div id="statusSubtext" class="text-xs text-slate-400">Click or tap any 3D piece to view legal moves</div>
+                    </div>
+                </div>
+                <span id="checkAlertBadge" class="hidden px-2.5 py-1 text-xs font-extrabold uppercase tracking-wider rounded-lg bg-red-500/20 text-red-400 border border-red-500/40 animate-bounce">
+                    CHECK
+                </span>
+            </div>
+
+            <!-- Mode & Match Settings Panel -->
+            <div class="bg-slate-950/60 p-3 rounded-xl border border-slate-800/80 flex flex-col gap-2.5">
+                
+                <!-- AI Specific Settings -->
+                <div id="aiSettingsPanel" class="flex flex-col gap-2.5">
+                    <div>
+                        <label class="block text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1">AmanBot 3D AI Difficulty</label>
+                        <select id="aiDifficultySelect" onchange="onDifficultyChange()" class="w-full bg-slate-800 hover:bg-slate-750 text-slate-100 text-xs font-semibold rounded-lg px-3 py-2 border border-slate-700 focus:outline-none focus:border-amber-500">
+                            <option value="1">Level 1 — AmanBot Lite (Easy)</option>
+                            <option value="2">Level 2 — AmanBot Club (Medium)</option>
+                            <option value="3" selected>Level 3 — AmanBot Tactician (Hard)</option>
+                            <option value="4">Level 4 — AmanBot Grandmaster (Max)</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Play As</label>
+                        <div class="grid grid-cols-3 gap-1.5">
+                            <button id="playWhiteBtn" onclick="setPlayerColorChoice('w')" class="py-1.5 px-2 rounded-lg text-xs font-semibold border transition flex items-center justify-center gap-1.5 bg-amber-500/20 border-amber-500 text-amber-300">
+                                <span class="w-2.5 h-2.5 rounded-full bg-white inline-block"></span> White
+                            </button>
+                            <button id="playRandomBtn" onclick="setPlayerColorChoice('random')" class="py-1.5 px-2 rounded-lg text-xs font-semibold border transition flex items-center justify-center gap-1 bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700">
+                                <span>🎲</span> Random
+                            </button>
+                            <button id="playBlackBtn" onclick="setPlayerColorChoice('b')" class="py-1.5 px-2 rounded-lg text-xs font-semibold border transition flex items-center justify-center gap-1.5 bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700">
+                                <span class="w-2.5 h-2.5 rounded-full bg-slate-950 border border-slate-400 inline-block"></span> Black
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Pass & Play (2-Player) Specific Settings -->
+                <div id="pvpSettingsPanel" class="hidden flex-col gap-2.5">
+                    <div class="grid grid-cols-2 gap-2">
+                        <div>
+                            <label class="block text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1">White Player</label>
+                            <input id="whitePlayerInput" type="text" value="Aman" oninput="onPlayerNameInput()" maxlength="18" class="w-full bg-slate-800 text-slate-100 text-xs font-semibold rounded-lg px-2.5 py-1.5 border border-slate-700 focus:outline-none focus:border-amber-500" placeholder="Aman" />
+                        </div>
+                        <div>
+                            <label class="block text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Black Player</label>
+                            <input id="blackPlayerInput" type="text" value="Player 2" oninput="onPlayerNameInput()" maxlength="18" class="w-full bg-slate-800 text-slate-100 text-xs font-semibold rounded-lg px-2.5 py-1.5 border border-slate-700 focus:outline-none focus:border-amber-500" placeholder="Player 2" />
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-2 pt-0.5">
+                        <label class="flex items-center justify-between bg-slate-900/90 px-2.5 py-2 rounded-lg border border-slate-800 cursor-pointer hover:border-slate-700 transition" title="Automatically orbits the 3D camera 180° to the active player's side after every turn">
+                            <span class="text-[11px] font-semibold text-slate-300">Auto-Orbit 3D Turn</span>
+                            <input id="autoFlipToggle" type="checkbox" checked onchange="onPassAndPlayOptionChange()" class="accent-amber-500 w-3.5 h-3.5 rounded cursor-pointer" />
+                        </label>
+                        <button onclick="swapPvpNames()" class="bg-slate-900/90 hover:bg-slate-800 px-2.5 py-2 rounded-lg border border-slate-800 text-[11px] font-semibold text-amber-300 transition flex items-center justify-center gap-1">
+                            <span>🎲</span> Swap Sides
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Shared Chess Clock / Timer Setting -->
+                <div class="pt-1.5 border-t border-slate-800/80 grid grid-cols-2 gap-2 items-center">
+                    <div>
+                        <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Chess Clock</label>
+                        <select id="clockSelect" onchange="onClockSettingChange()" class="w-full bg-slate-800 hover:bg-slate-750 text-slate-100 text-xs font-semibold rounded-lg px-2.5 py-1.5 border border-slate-700 focus:outline-none focus:border-amber-500">
+                            <option value="0" selected>∞ Untimed</option>
+                            <option value="180">⚡ 3m Blitz</option>
+                            <option value="300">🔥 5m Blitz</option>
+                            <option value="600">⏱️ 10m Rapid</option>
+                            <option value="900">🏛️ 15m Classical</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">3D Board Finish</label>
+                        <select id="themeSelectDropdown" onchange="setBoardTheme(this.value)" class="w-full bg-slate-800 hover:bg-slate-750 text-slate-100 text-xs font-semibold rounded-lg px-2.5 py-1.5 border border-slate-700 focus:outline-none focus:border-amber-500">
+                            <option value="wood" selected>Rosewood &amp; Brass</option>
+                            <option value="marble">Royal Marble &amp; Gold</option>
+                            <option value="emerald">Emerald Tournament</option>
+                            <option value="walnut">Walnut Grandmaster</option>
+                            <option value="cyber">Obsidian Cyber Neon</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Move History Log -->
+            <div class="flex flex-col flex-1 min-h-[155px] max-h-[205px] bg-slate-950/80 rounded-xl border border-slate-800/90 overflow-hidden">
+                <div class="px-3.5 py-2 bg-slate-900 border-b border-slate-800 flex items-center justify-between">
+                    <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Move History (SAN)</span>
+                    <span id="moveCountLabel" class="text-xs mono text-slate-500">0 moves</span>
+                </div>
+                <div id="moveHistoryContainer" class="flex-1 overflow-y-auto divide-y divide-slate-800/40 text-xs mono">
+                    <div class="h-full flex items-center justify-center text-slate-600 italic py-10">
+                        No moves played yet
+                    </div>
+                </div>
+            </div>
+
+            <!-- Primary Action Buttons -->
+            <div class="grid grid-cols-3 gap-2 pt-0.5">
+                <button onclick="startNewGame()" class="col-span-3 py-2.5 px-4 rounded-xl font-bold text-sm bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 shadow-lg shadow-amber-500/20 active:scale-[0.99] transition flex items-center justify-center gap-2">
+                    <span>✨</span> New 3D Match
+                </button>
+                <button id="undoBtn" onclick="undoLastMove()" class="py-2 px-2.5 rounded-xl font-semibold text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 active:scale-[0.99] transition flex items-center justify-center gap-1 disabled:opacity-40 disabled:pointer-events-none">
+                    <span>↩️</span> Undo
+                </button>
+                <button onclick="flipBoardOrientation()" class="py-2 px-2.5 rounded-xl font-semibold text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 active:scale-[0.99] transition flex items-center justify-center gap-1">
+                    <span>🔄</span> Flip 180°
+                </button>
+                <button onclick="resetCameraView()" class="py-2 px-2.5 rounded-xl font-semibold text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 active:scale-[0.99] transition flex items-center justify-center gap-1">
+                    <span>🎯</span> Reset Cam
+                </button>
+            </div>
+
+            <!-- Sidebar Creator Signature Card -->
+            <div onclick="openCreatorModal()" class="p-2.5 rounded-xl bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 border border-slate-800/90 hover:border-amber-500/40 transition cursor-pointer flex items-center justify-between group">
+                <div class="flex items-center gap-2.5">
+                    <div class="w-7 h-7 rounded-lg bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-xs font-extrabold text-amber-400">
+                        A
+                    </div>
+                    <div>
+                        <div class="text-[11px] font-bold text-slate-200 group-hover:text-amber-300 transition">Aman Chess 3D Engine v3.0</div>
+                        <div class="text-[10px] text-slate-400">3D WebGL &amp; AI Engineered by <span class="text-amber-400 font-semibold">Aman</span></div>
+                    </div>
+                </div>
+                <span class="text-[10px] font-semibold text-slate-400 group-hover:text-amber-300 px-2 py-0.5 rounded bg-slate-800/80 border border-slate-700">About →</span>
+            </div>
+        </aside>
+    </main>
+
+    <!-- Footer Signature -->
+    <footer class="border-t border-slate-900 bg-slate-950/90 py-2.5 px-4 text-center text-xs text-slate-400">
+        <div class="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
+            <div class="flex items-center gap-2">
+                <span class="text-amber-400 font-bold">♔ Aman Chess 3D</span>
+                <span>•</span>
+                <span>3D WebGL Geometry, Shaders &amp; Alpha-Beta AI Engine by <strong class="text-slate-200">Aman</strong></span>
+            </div>
+            <div class="text-[11px] text-slate-500">
+                © 2026 Aman Creations. All Rights Reserved.
+            </div>
+        </div>
+    </footer>
+
+    <!-- About Aman Chess 3D / Developer Showcase Modal -->
+    <div id="creatorModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+        <div class="bg-slate-900 border border-slate-700 rounded-2xl max-w-md w-full p-6 shadow-2xl relative">
+            <div class="flex items-center gap-3.5 mb-4">
+                <div class="w-14 h-14 rounded-2xl bg-gradient-to-br from-amber-400 to-orange-600 flex items-center justify-center text-2xl font-black text-slate-950 shadow-lg shadow-amber-500/20">
+                    ♔
+                </div>
+                <div>
+                    <span class="text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">3D WebGL Edition</span>
+                    <h3 class="text-lg font-extrabold text-white mt-0.5">Aman Chess 3D Studio</h3>
+                    <p class="text-xs text-slate-400">Lead Architect &amp; Creator: <strong class="text-amber-400">Aman</strong></p>
+                </div>
+            </div>
+
+            <div class="bg-slate-950/80 border border-slate-800 rounded-xl p-3.5 text-xs text-slate-300 space-y-2 mb-5 leading-relaxed">
+                <p>
+                    <strong class="text-white">Aman Chess 3D</strong> is a complete 3D WebGL chess experience designed and engineered from the ground up by <strong class="text-amber-400">Aman</strong>.
+                </p>
+                <ul class="space-y-1.5 text-[11px] text-slate-400 list-disc list-inside">
+                    <li><strong class="text-slate-200">Sculpted 3D WebGL Pieces:</strong> Lathe-turned 3D silhouettes (King cross, Queen coronet, Knight horse head, Rook battlements) with real-time shadows and engraved <strong class="text-amber-300">"AMAN CHESS"</strong> brass plaques.</li>
+                    <li><strong class="text-slate-200">AmanBot AI Engine:</strong> Alpha-Beta Pruning Minimax + Positional Piece-Square Tables.</li>
+                    <li><strong class="text-slate-200">Interactive 3D Orbit Camera:</strong> 360° mouse/touch orbit, scroll zoom, smooth 180° auto-flip in Pass &amp; Play, and instant 3D/2D switching.</li>
+                </ul>
+            </div>
+
+            <button onclick="closeCreatorModal()" class="w-full py-2.5 px-4 rounded-xl font-bold text-xs bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 shadow-lg shadow-amber-500/20 transition">
+                Back to 3D Board
+            </button>
+        </div>
+    </div>
+
+    <!-- Pawn Promotion Modal Dialog -->
+    <div id="promotionModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+        <div class="bg-slate-900 border border-slate-700 rounded-2xl max-w-sm w-full p-5 shadow-2xl transform transition-all">
+            <h3 class="text-base font-bold text-white text-center mb-1">Promote Your Pawn</h3>
+            <p class="text-xs text-slate-400 text-center mb-4">Select a piece to promote your pawn on the 8th rank</p>
+            <div id="promotionOptions" class="grid grid-cols-4 gap-2.5"></div>
+        </div>
+    </div>
+
+    <!-- Game Over Summary Modal -->
+    <div id="gameOverModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+        <div class="bg-slate-900 border border-slate-700 rounded-2xl max-w-md w-full p-6 shadow-2xl text-center">
+            <div id="gameOverIcon" class="w-16 h-16 mx-auto mb-3 rounded-2xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-3xl">
+                🏆
+            </div>
+            <h2 id="gameOverTitle" class="text-xl font-extrabold text-white mb-1">Checkmate!</h2>
+            <p id="gameOverSubtitle" class="text-sm text-slate-300 mb-6">Aman wins the game by checkmate.</p>
+            <div class="flex items-center gap-3">
+                <button onclick="closeGameOverModal()" class="flex-1 py-2.5 px-4 rounded-xl font-semibold text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition">
+                    Inspect 3D Board
+                </button>
+                <button onclick="closeGameOverModal(); startNewGame();" class="flex-1 py-2.5 px-4 rounded-xl font-bold text-xs bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 shadow-lg shadow-amber-500/20 transition">
+                    Play Again
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        /**************************************************************************
+         * 1. 2D VECTOR SVG PIECES (Used for Captured Trays, Promotion & 2D Mode)
+         **************************************************************************/
+        const PIECE_SVGS = {
+            wP: `<svg viewBox="0 0 45 45" class="piece-svg"><path d="M 22.5,9 C 19.5,9 17,11.5 17,14.5 C 17,16.8 18.4,18.7 20.4,19.5 C 17,21 15,24.5 15,29 L 30,29 C 30,24.5 28,21 24.6,19.5 C 26.6,18.7 28,16.8 28,14.5 C 28,11.5 25.5,9 22.5,9 z M 12.5,32 L 32.5,32 C 33.5,32 34,33.5 34,35.5 L 11,35.5 C 11,33.5 11.5,32 12.5,32 z" fill="#ffffff" stroke="#1e293b" stroke-width="2" stroke-linecap="round"/></svg>`,
+            wR: `<svg viewBox="0 0 45 45" class="piece-svg"><g fill="#ffffff" stroke="#1e293b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M 9,39 L 36,39 L 36,36 L 9,36 L 9,39 z"/><path d="M 12,36 L 12,32 L 33,32 L 33,36 L 12,36 z"/><path d="M 11,14 L 11,9 L 15,9 L 15,11 L 20,11 L 20,9 L 25,9 L 25,11 L 30,11 L 30,9 L 34,9 L 34,14"/><path d="M 34,14 L 31,17 L 14,17 L 11,14"/><path d="M 31,17 L 31,29.5 L 14,29.5 L 14,17"/><path d="M 14,29.5 L 12,32 L 33,32 L 31,29.5"/></g></svg>`,
+            wN: `<svg viewBox="0 0 45 45" class="piece-svg"><g fill="#ffffff" stroke="#1e293b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M 22,10 C 32.5,11 38.5,18 38,39 L 15,39 C 15,30 25,32.5 23,18"/><path d="M 24,18 C 24.38,20.91 18.45,25.37 16,27 C 13,29 13.18,31.34 11,31 C 9.958,30.06 12.41,27.96 11,28 C 10,28 11.19,29.23 10,30 C 9,30 5.997,31 6,26 C 6,24 12,14 12,14 C 12,14 13.89,12.1 14,10.5 C 13.27,9.506 13.5,8.5 13.5,7.5 C 14.5,6.5 16.5,10 16.5,10 L 18.5,10 C 18.5,10 19.28,8.008 21,7 C 22,7 22,10 22,10"/><circle cx="15.5" cy="14.5" r="1.2" fill="#1e293b"/></g></svg>`,
+            wB: `<svg viewBox="0 0 45 45" class="piece-svg"><g fill="#ffffff" stroke="#1e293b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M 9,36 C 12.39,35.03 19.11,36.43 22.5,34 C 25.89,36.43 32.61,35.03 36,36 C 36,36 37.65,36.54 39,38 C 38.32,38.97 37.35,38.99 36,38.5 C 32.61,37.53 25.89,38.96 22.5,37.5 C 19.11,38.96 12.39,37.53 9,38.5 C 7.646,38.99 6.677,38.97 6,38 C 7.354,36.06 9,36 9,36 z"/><path d="M 15,32 C 17.5,34.5 27.5,34.5 30,32 C 30.5,30.5 30,30 30,30 C 30,27.5 27.5,26 27.5,26 C 33,24.5 33.5,14.5 22.5,10.5 C 11.5,14.5 12,24.5 17.5,26 C 17.5,26 15,27.5 15,30 C 15,30 14.5,30.5 15,32 z"/><circle cx="22.5" cy="8" r="2.2"/><path d="M 17.5,26 L 27.5,26 M 15,30 L 30,30 M 22.5,15.5 L 22.5,20.5 M 20,18 L 25,18"/></g></svg>`,
+            wQ: `<svg viewBox="0 0 45 45" class="piece-svg"><g fill="#ffffff" stroke="#1e293b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M 9,26 C 17.5,24.5 30,24.5 36,26 L 38.5,13.5 L 31,25 L 30.7,10.9 L 25.5,24.5 L 22.5,10 L 19.5,24.5 L 14.3,10.9 L 14,25 L 6.5,13.5 L 9,26 z"/><path d="M 9,26 C 9,28 10.5,28 11.5,30 C 12.5,31.5 12.5,31 12,33.5 C 10.5,34.5 11,36 11,36 C 9.5,37.5 11,38.5 11,38.5 C 17.5,39.5 27.5,39.5 34,38.5 C 34,38.5 35.5,37.5 34,36 C 34,36 34.5,34.5 33,33.5 C 32.5,31 32.5,31.5 33.5,30 C 34.5,28 36,28 36,26 C 27.5,24.5 17.5,24.5 9,26 z"/><circle cx="6" cy="12" r="1.8"/><circle cx="14" cy="9" r="1.8"/><circle cx="22.5" cy="8" r="1.8"/><circle cx="31" cy="9" r="1.8"/><circle cx="39" cy="12" r="1.8"/></g></svg>`,
+            wK: `<svg viewBox="0 0 45 45" class="piece-svg"><g fill="#ffffff" stroke="#1e293b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M 22.5,11.63 L 22.5,6"/><path d="M 20,8 L 25,8"/><path d="M 22.5,25 C 22.5,25 27,17.5 25.5,14.5 C 25.5,14.5 24.5,12 22.5,12 C 20.5,12 19.5,14.5 19.5,14.5 C 18,17.5 22.5,25 22.5,25"/><path d="M 11.5,37 C 17,40.5 27,40.5 32.5,37 L 32.5,30 C 32.5,30 41.5,25.5 38.5,19.5 C 34.5,13 25,16 22.5,23.5 L 22.5,27 L 22.5,23.5 C 19,16 9.5,13 6.5,19.5 C 3.5,25.5 11.5,29.5 11.5,29.5 L 11.5,37 z"/><path d="M 11.5,30 C 17,27 27,27 32.5,30"/><path d="M 11.5,33.5 C 17,30.5 27,30.5 32.5,33.5"/></g></svg>`,
+
+            bP: `<svg viewBox="0 0 45 45" class="piece-svg"><path d="M 22.5,9 C 19.5,9 17,11.5 17,14.5 C 17,16.8 18.4,18.7 20.4,19.5 C 17,21 15,24.5 15,29 L 30,29 C 30,24.5 28,21 24.6,19.5 C 26.6,18.7 28,16.8 28,14.5 C 28,11.5 25.5,9 22.5,9 z M 12.5,32 L 32.5,32 C 33.5,32 34,33.5 34,35.5 L 11,35.5 C 11,33.5 11.5,32 12.5,32 z" fill="#1e293b" stroke="#f8fafc" stroke-width="1.8" stroke-linecap="round"/></svg>`,
+            bR: `<svg viewBox="0 0 45 45" class="piece-svg"><g fill="#1e293b" stroke="#f8fafc" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M 9,39 L 36,39 L 36,36 L 9,36 L 9,39 z"/><path d="M 12,36 L 12,32 L 33,32 L 33,36 L 12,36 z"/><path d="M 11,14 L 11,9 L 15,9 L 15,11 L 20,11 L 20,9 L 25,9 L 25,11 L 30,11 L 30,9 L 34,9 L 34,14"/><path d="M 34,14 L 31,17 L 14,17 L 11,14"/><path d="M 31,17 L 31,29.5 L 14,29.5 L 14,17"/><path d="M 14,29.5 L 12,32 L 33,32 L 31,29.5"/></g></svg>`,
+            bN: `<svg viewBox="0 0 45 45" class="piece-svg"><g fill="#1e293b" stroke="#f8fafc" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M 22,10 C 32.5,11 38.5,18 38,39 L 15,39 C 15,30 25,32.5 23,18"/><path d="M 24,18 C 24.38,20.91 18.45,25.37 16,27 C 13,29 13.18,31.34 11,31 C 9.958,30.06 12.41,27.96 11,28 C 10,28 11.19,29.23 10,30 C 9,30 5.997,31 6,26 C 6,24 12,14 12,14 C 12,14 13.89,12.1 14,10.5 C 13.27,9.506 13.5,8.5 13.5,7.5 C 14.5,6.5 16.5,10 16.5,10 L 18.5,10 C 18.5,10 19.28,8.008 21,7 C 22,7 22,10 22,10"/><circle cx="15.5" cy="14.5" r="1.2" fill="#f8fafc"/></g></svg>`,
+            bB: `<svg viewBox="0 0 45 45" class="piece-svg"><g fill="#1e293b" stroke="#f8fafc" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M 9,36 C 12.39,35.03 19.11,36.43 22.5,34 C 25.89,36.43 32.61,35.03 36,36 C 36,36 37.65,36.54 39,38 C 38.32,38.97 37.35,38.99 36,38.5 C 32.61,37.53 25.89,38.96 22.5,37.5 C 19.11,38.96 12.39,37.53 9,38.5 C 7.646,38.99 6.677,38.97 6,38 C 7.354,36.06 9,36 9,36 z"/><path d="M 15,32 C 17.5,34.5 27.5,34.5 30,32 C 30.5,30.5 30,30 30,30 C 30,27.5 27.5,26 27.5,26 C 33,24.5 33.5,14.5 22.5,10.5 C 11.5,14.5 12,24.5 17.5,26 C 17.5,26 15,27.5 15,30 C 15,30 14.5,30.5 15,32 z"/><circle cx="22.5" cy="8" r="2.2"/><path d="M 17.5,26 L 27.5,26 M 15,30 L 30,30 M 22.5,15.5 L 22.5,20.5 M 20,18 L 25,18"/></g></svg>`,
+            bQ: `<svg viewBox="0 0 45 45" class="piece-svg"><g fill="#1e293b" stroke="#f8fafc" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M 9,26 C 17.5,24.5 30,24.5 36,26 L 38.5,13.5 L 31,25 L 30.7,10.9 L 25.5,24.5 L 22.5,10 L 19.5,24.5 L 14.3,10.9 L 14,25 L 6.5,13.5 L 9,26 z"/><path d="M 9,26 C 9,28 10.5,28 11.5,30 C 12.5,31.5 12.5,31 12,33.5 C 10.5,34.5 11,36 11,36 C 9.5,37.5 11,38.5 11,38.5 C 17.5,39.5 27.5,39.5 34,38.5 C 34,38.5 35.5,37.5 34,36 C 34,36 34.5,34.5 33,33.5 C 32.5,31 32.5,31.5 33.5,30 C 34.5,28 36,28 36,26 C 27.5,24.5 17.5,24.5 9,26 z"/><circle cx="6" cy="12" r="1.8"/><circle cx="14" cy="9" r="1.8"/><circle cx="22.5" cy="8" r="1.8"/><circle cx="31" cy="9" r="1.8"/><circle cx="39" cy="12" r="1.8"/></g></svg>`,
+            bK: `<svg viewBox="0 0 45 45" class="piece-svg"><g fill="#1e293b" stroke="#f8fafc" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M 22.5,11.63 L 22.5,6"/><path d="M 20,8 L 25,8"/><path d="M 22.5,25 C 22.5,25 27,17.5 25.5,14.5 C 25.5,14.5 24.5,12 22.5,12 C 20.5,12 19.5,14.5 19.5,14.5 C 18,17.5 22.5,25 22.5,25"/><path d="M 11.5,37 C 17,40.5 27,40.5 32.5,37 L 32.5,30 C 32.5,30 41.5,25.5 38.5,19.5 C 34.5,13 25,16 22.5,23.5 L 22.5,27 L 22.5,23.5 C 19,16 9.5,13 6.5,19.5 C 3.5,25.5 11.5,29.5 11.5,29.5 L 11.5,37 z"/><path d="M 11.5,30 C 17,27 27,27 32.5,30"/><path d="M 11.5,33.5 C 17,30.5 27,30.5 32.5,33.5"/></g></svg>`
+        };
+
+        /**************************************************************************
+         * 2. SYNTHESIZED AUDIO ENGINE (Web Audio API)
+         **************************************************************************/
+        let soundEnabled = true;
+        let audioCtx = null;
+
+        function playSound(type) {
+            if (!soundEnabled) return;
+            try {
+                if (!audioCtx) {
+                    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+                if (audioCtx.state === 'suspended') {
+                    audioCtx.resume();
+                }
+
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+
+                const now = audioCtx.currentTime;
+
+                if (type === 'move') {
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(230, now);
+                    osc.frequency.exponentialRampToValueAtTime(145, now + 0.07);
+                    gain.gain.setValueAtTime(0.18, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.07);
+                    osc.start(now);
+                    osc.stop(now + 0.075);
+                } else if (type === 'capture') {
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(360, now);
+                    osc.frequency.exponentialRampToValueAtTime(105, now + 0.095);
+                    gain.gain.setValueAtTime(0.26, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.095);
+                    osc.start(now);
+                    osc.stop(now + 0.1);
+                } else if (type === 'check') {
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(520, now);
+                    osc.frequency.setValueAtTime(680, now + 0.07);
+                    gain.gain.setValueAtTime(0.18, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.24);
+                    osc.start(now);
+                    osc.stop(now + 0.25);
+                } else if (type === 'gameover') {
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(293.66, now);
+                    osc.frequency.setValueAtTime(369.99, now + 0.12);
+                    osc.frequency.setValueAtTime(440, now + 0.24);
+                    gain.gain.setValueAtTime(0.22, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.52);
+                    osc.start(now);
+                    osc.stop(now + 0.55);
+                }
+            } catch (e) {}
+        }
+
+        function toggleSound() {
+            soundEnabled = !soundEnabled;
+            document.getElementById('soundIcon').textContent = soundEnabled ? '🔊' : '🔇';
+        }
+
+        /**************************************************************************
+         * 3. 3D MATERIAL THEMES & THREE.JS ENGINE ARCHITECTURE
+         **************************************************************************/
+        const THEMES_3D = {
+            wood: {
+                lightSq: 0xf3dec0,
+                darkSq: 0x8b4c2b,
+                frame: 0x3b1d0e,
+                trim: 0xd97706,
+                whitePiece: 0xfff8eb,
+                blackPiece: 0x261710,
+                whiteRoughness: 0.22,
+                blackRoughness: 0.28,
+                whiteMetalness: 0.08,
+                blackMetalness: 0.15,
+                boardRoughness: 0.35
+            },
+            marble: {
+                lightSq: 0xf8fafc,
+                darkSq: 0x334155,
+                frame: 0x0f172a,
+                trim: 0xfbbf24,
+                whitePiece: 0xffffff,
+                blackPiece: 0x1e293b,
+                whiteRoughness: 0.12,
+                blackRoughness: 0.15,
+                whiteMetalness: 0.22,
+                blackMetalness: 0.45,
+                boardRoughness: 0.18
+            },
+            emerald: {
+                lightSq: 0xeeeed2,
+                darkSq: 0x5c8340,
+                frame: 0x1a2e19,
+                trim: 0xeab308,
+                whitePiece: 0xfefce8,
+                blackPiece: 0x1e293b,
+                whiteRoughness: 0.2,
+                blackRoughness: 0.22,
+                whiteMetalness: 0.1,
+                blackMetalness: 0.2,
+                boardRoughness: 0.3
+            },
+            walnut: {
+                lightSq: 0xe7d3b8,
+                darkSq: 0x5c3a21,
+                frame: 0x29170b,
+                trim: 0xb45309,
+                whitePiece: 0xf5ebe0,
+                blackPiece: 0x2b180a,
+                whiteRoughness: 0.25,
+                blackRoughness: 0.25,
+                whiteMetalness: 0.12,
+                blackMetalness: 0.18,
+                boardRoughness: 0.32
+            },
+            cyber: {
+                lightSq: 0x1e293b,
+                darkSq: 0x090d16,
+                frame: 0x020617,
+                trim: 0x38bdf8,
+                whitePiece: 0xe0f2fe,
+                blackPiece: 0x311042,
+                whiteRoughness: 0.1,
+                blackRoughness: 0.1,
+                whiteMetalness: 0.55,
+                blackMetalness: 0.65,
+                boardRoughness: 0.15
+            }
+        };
+
+        let currentThemeKey = 'wood';
+        let renderDimension = '3d'; // '3d' or '2d'
+
+        // Three.js Globals
+        let scene, camera, renderer, raycaster, mouseNdc;
+        let boardGroup, squaresGroup, highlightsGroup, piecesGroup;
+        let squareMeshes = []; // 8x8 references
+        let pieceMeshes = [];  // 8x8 references to Three.Group
+        let sharedGeometries = {};
+        let materials3D = {};
+
+        // Orbit Camera Spherical Coordinates
+        const SQ_SIZE = 1.25;
+        const BOARD_OFFSET = (7 * SQ_SIZE) / 2; // 4.375
+        let camSpherical = {
+            theta: 0,              // 0 = White side (+Z), Math.PI = Black side (-Z)
+            phi: 0.92,             // Polar angle from Y axis
+            radius: 13.8
+        };
+        let targetSpherical = {
+            theta: 0,
+            phi: 0.92,
+            radius: 13.8
+        };
+
+        // Active 3D Piece Move Animation State
+        let activeMoveAnim = null; // { mesh, startPos, endPos, startTime, duration, capturedMesh }
+
+        function boardToWorld(r, c) {
+            return {
+                x: c * SQ_SIZE - BOARD_OFFSET,
+                z: r * SQ_SIZE - BOARD_OFFSET
+            };
+        }
+
+        /**
+         * Builds procedural Lathe & Extrude geometries for all 6 chess piece types
+         */
+        function buildPieceGeometries() {
+            const latheSegs = 28;
+
+            // Helper to create Vector2 profile
+            const pts = (arr) => arr.map(([x, y]) => new THREE.Vector2(x, y));
+
+            // 1. PAWN
+            sharedGeometries.pawnLathe = new THREE.LatheGeometry(pts([
+                [0.0, 0.0], [0.42, 0.0], [0.42, 0.08], [0.36, 0.14],
+                [0.28, 0.22], [0.18, 0.52], [0.14, 0.78], [0.24, 0.84],
+                [0.15, 0.90], [0.0, 0.90]
+            ]), latheSegs);
+            sharedGeometries.pawnHead = new THREE.SphereGeometry(0.23, 24, 24);
+
+            // 2. ROOK
+            sharedGeometries.rookLathe = new THREE.LatheGeometry(pts([
+                [0.0, 0.0], [0.45, 0.0], [0.45, 0.10], [0.38, 0.18],
+                [0.30, 0.28], [0.24, 0.95], [0.34, 1.05], [0.34, 1.24],
+                [0.22, 1.24], [0.22, 1.12], [0.0, 1.12]
+            ]), latheSegs);
+            sharedGeometries.rookMerlon = new THREE.BoxGeometry(0.11, 0.14, 0.11);
+
+            // 3. KNIGHT (Base + Sculpted Horse Head Extrusion)
+            sharedGeometries.knightBase = new THREE.LatheGeometry(pts([
+                [0.0, 0.0], [0.45, 0.0], [0.45, 0.10], [0.38, 0.18],
+                [0.31, 0.28], [0.26, 0.42], [0.0, 0.42]
+            ]), latheSegs);
+
+            const horseShape = new THREE.Shape();
+            horseShape.moveTo(-0.22, 0.35);
+            horseShape.lineTo(0.22, 0.35);
+            horseShape.bezierCurveTo(0.25, 0.58, 0.20, 0.78, 0.08, 0.92);
+            horseShape.lineTo(0.28, 0.82); // Snout bottom
+            horseShape.lineTo(0.33, 0.93); // Nose tip
+            horseShape.lineTo(0.14, 1.08); // Forehead
+            horseShape.lineTo(0.18, 1.24); // Ear tip
+            horseShape.lineTo(0.03, 1.16); // Behind ear
+            horseShape.bezierCurveTo(-0.20, 1.12, -0.30, 0.82, -0.22, 0.35);
+
+            sharedGeometries.knightHead = new THREE.ExtrudeGeometry(horseShape, {
+                depth: 0.24,
+                bevelEnabled: true,
+                bevelSegments: 3,
+                steps: 1,
+                bevelSize: 0.05,
+                bevelThickness: 0.05
+            });
+            sharedGeometries.knightHead.center();
+
+            // 4. BISHOP
+            sharedGeometries.bishopLathe = new THREE.LatheGeometry(pts([
+                [0.0, 0.0], [0.45, 0.0], [0.45, 0.10], [0.37, 0.18],
+                [0.27, 0.30], [0.17, 0.78], [0.27, 0.84], [0.19, 0.90],
+                [0.28, 1.12], [0.22, 1.32], [0.08, 1.46], [0.0, 1.48]
+            ]), latheSegs);
+            sharedGeometries.bishopTip = new THREE.SphereGeometry(0.075, 16, 16);
+
+            // 5. QUEEN
+            sharedGeometries.queenLathe = new THREE.LatheGeometry(pts([
+                [0.0, 0.0], [0.48, 0.0], [0.48, 0.10], [0.40, 0.20],
+                [0.30, 0.32], [0.19, 0.92], [0.31, 1.00], [0.22, 1.08],
+                [0.33, 1.45], [0.24, 1.50], [0.0, 1.46]
+            ]), latheSegs);
+            sharedGeometries.queenCrownBall = new THREE.SphereGeometry(0.055, 14, 14);
+
+            // 6. KING
+            sharedGeometries.kingLathe = new THREE.LatheGeometry(pts([
+                [0.0, 0.0], [0.50, 0.0], [0.50, 0.11], [0.42, 0.22],
+                [0.32, 0.35], [0.21, 1.02], [0.34, 1.10], [0.24, 1.18],
+                [0.34, 1.54], [0.20, 1.62], [0.0, 1.62]
+            ]), latheSegs);
+            sharedGeometries.kingCrossV = new THREE.BoxGeometry(0.08, 0.28, 0.08);
+            sharedGeometries.kingCrossH = new THREE.BoxGeometry(0.22, 0.08, 0.08);
+        }
+
+        function createPieceMeshGroup(pieceCode) {
+            const color = pieceCode[0];
+            const type = pieceCode[1];
+            const mat = color === 'w' ? materials3D.whitePiece : materials3D.blackPiece;
+            const accentMat = materials3D.trim;
+
+            const group = new THREE.Group();
+
+            if (type === 'P') {
+                const body = new THREE.Mesh(sharedGeometries.pawnLathe, mat);
+                body.castShadow = true;
+                body.receiveShadow = true;
+                group.add(body);
+
+                const head = new THREE.Mesh(sharedGeometries.pawnHead, mat);
+                head.position.y = 1.06;
+                head.castShadow = true;
+                head.receiveShadow = true;
+                group.add(head);
+            } else if (type === 'R') {
+                const body = new THREE.Mesh(sharedGeometries.rookLathe, mat);
+                body.castShadow = true;
+                body.receiveShadow = true;
+                group.add(body);
+
+                for (let i = 0; i < 4; i++) {
+                    const angle = (i * Math.PI) / 2 + Math.PI / 4;
+                    const merlon = new THREE.Mesh(sharedGeometries.rookMerlon, mat);
+                    merlon.position.set(Math.cos(angle) * 0.26, 1.29, Math.sin(angle) * 0.26);
+                    merlon.castShadow = true;
+                    group.add(merlon);
+                }
+            } else if (type === 'N') {
+                const base = new THREE.Mesh(sharedGeometries.knightBase, mat);
+                base.castShadow = true;
+                base.receiveShadow = true;
+                group.add(base);
+
+                const head = new THREE.Mesh(sharedGeometries.knightHead, mat);
+                head.position.y = 0.82;
+                // Orient horse facing opponent's side
+                head.rotation.y = color === 'w' ? Math.PI / 2 : -Math.PI / 2;
+                head.castShadow = true;
+                head.receiveShadow = true;
+                group.add(head);
+            } else if (type === 'B') {
+                const body = new THREE.Mesh(sharedGeometries.bishopLathe, mat);
+                body.castShadow = true;
+                body.receiveShadow = true;
+                group.add(body);
+
+                const tip = new THREE.Mesh(sharedGeometries.bishopTip, accentMat);
+                tip.position.y = 1.53;
+                tip.castShadow = true;
+                group.add(tip);
+            } else if (type === 'Q') {
+                const body = new THREE.Mesh(sharedGeometries.queenLathe, mat);
+                body.castShadow = true;
+                body.receiveShadow = true;
+                group.add(body);
+
+                for (let i = 0; i < 6; i++) {
+                    const angle = (i * Math.PI * 2) / 6;
+                    const pearl = new THREE.Mesh(sharedGeometries.queenCrownBall, accentMat);
+                    pearl.position.set(Math.cos(angle) * 0.29, 1.52, Math.sin(angle) * 0.29);
+                    group.add(pearl);
+                }
+                const centerPearl = new THREE.Mesh(sharedGeometries.queenCrownBall, accentMat);
+                centerPearl.position.y = 1.55;
+                group.add(centerPearl);
+            } else if (type === 'K') {
+                const body = new THREE.Mesh(sharedGeometries.kingLathe, mat);
+                body.castShadow = true;
+                body.receiveShadow = true;
+                group.add(body);
+
+                const crossV = new THREE.Mesh(sharedGeometries.kingCrossV, accentMat);
+                crossV.position.y = 1.78;
+                crossV.castShadow = true;
+                group.add(crossV);
+
+                const crossH = new THREE.Mesh(sharedGeometries.kingCrossH, accentMat);
+                crossH.position.y = 1.82;
+                crossH.castShadow = true;
+                group.add(crossH);
+            }
+
+            return group;
+        }
+
+        /**
+         * Generates a dynamic CanvasTexture for coordinates (A-H, 1-8) and "AMAN CHESS" brass plaques
+         */
+        function createLabelTexture(text, bgHex, textHex, width = 128, height = 128, fontSize = 64) {
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+
+            if (bgHex) {
+                ctx.fillStyle = bgHex;
+                ctx.fillRect(0, 0, width, height);
+            } else {
+                ctx.clearRect(0, 0, width, height);
+            }
+
+            ctx.fillStyle = textHex;
+            ctx.font = `800 ${fontSize}px "Inter", sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(text, width / 2, height / 2);
+
+            const tex = new THREE.CanvasTexture(canvas);
+            tex.anisotropy = 4;
+            return tex;
+        }
+
+        function initThreeJS() {
+            const canvas = document.getElementById('webglCanvas');
+            const container = document.getElementById('viewportContainer');
+
+            scene = new THREE.Scene();
+
+            camera = new THREE.PerspectiveCamera(40, 1, 0.1, 100);
+            updateCameraFromSpherical();
+
+            renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+            // Studio Lighting Setup
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.65);
+            scene.add(ambientLight);
+
+            const mainLight = new THREE.DirectionalLight(0xfffbeb, 0.95);
+            mainLight.position.set(8, 16, 10);
+            mainLight.castShadow = true;
+            mainLight.shadow.mapSize.width = 2048;
+            mainLight.shadow.mapSize.height = 2048;
+            mainLight.shadow.camera.near = 2;
+            mainLight.shadow.camera.far = 35;
+            const d = 7.5;
+            mainLight.shadow.camera.left = -d;
+            mainLight.shadow.camera.right = d;
+            mainLight.shadow.camera.top = d;
+            mainLight.shadow.camera.bottom = -d;
+            mainLight.shadow.bias = -0.0005;
+            scene.add(mainLight);
+
+            const rimLight = new THREE.DirectionalLight(0x93c5fd, 0.42);
+            rimLight.position.set(-10, 10, -10);
+            scene.add(rimLight);
+
+            raycaster = new THREE.Raycaster();
+            mouseNdc = new THREE.Vector2();
+
+            boardGroup = new THREE.Group();
+            squaresGroup = new THREE.Group();
+            highlightsGroup = new THREE.Group();
+            piecesGroup = new THREE.Group();
+
+            scene.add(boardGroup);
+            scene.add(squaresGroup);
+            scene.add(highlightsGroup);
+            scene.add(piecesGroup);
+
+            buildPieceGeometries();
+            buildMaterialsAndBoard3D();
+            setupOrbitAndRaycastControls(canvas);
+
+            window.addEventListener('resize', onViewportResize);
+        }
+
+        function buildMaterialsAndBoard3D() {
+            const theme = THEMES_3D[currentThemeKey] || THEMES_3D.wood;
+
+            materials3D.lightSq = new THREE.MeshStandardMaterial({
+                color: theme.lightSq,
+                roughness: theme.boardRoughness,
+                metalness: 0.05
+            });
+            materials3D.darkSq = new THREE.MeshStandardMaterial({
+                color: theme.darkSq,
+                roughness: theme.boardRoughness,
+                metalness: 0.08
+            });
+            materials3D.frame = new THREE.MeshStandardMaterial({
+                color: theme.frame,
+                roughness: 0.4,
+                metalness: 0.15
+            });
+            materials3D.trim = new THREE.MeshStandardMaterial({
+                color: theme.trim,
+                roughness: 0.25,
+                metalness: 0.75
+            });
+            materials3D.whitePiece = new THREE.MeshStandardMaterial({
+                color: theme.whitePiece,
+                roughness: theme.whiteRoughness,
+                metalness: theme.whiteMetalness
+            });
+            materials3D.blackPiece = new THREE.MeshStandardMaterial({
+                color: theme.blackPiece,
+                roughness: theme.blackRoughness,
+                metalness: theme.blackMetalness
+            });
+
+            // Clear previous board & square meshes if rebuilding
+            while (boardGroup.children.length) boardGroup.remove(boardGroup.children[0]);
+            while (squaresGroup.children.length) squaresGroup.remove(squaresGroup.children[0]);
+            squareMeshes = Array.from({ length: 8 }, () => Array(8).fill(null));
+
+            // 1. Outer Sculpted Base Frame
+            const totalBoardSpan = SQ_SIZE * 8; // 10.0
+            const frameGeo = new THREE.BoxGeometry(totalBoardSpan + 1.5, 0.55, totalBoardSpan + 1.5);
+            const frameMesh = new THREE.Mesh(frameGeo, materials3D.frame);
+            frameMesh.position.y = -0.32;
+            frameMesh.receiveShadow = true;
+            boardGroup.add(frameMesh);
+
+            // Metallic inner trim border
+            const trimGeo = new THREE.BoxGeometry(totalBoardSpan + 0.28, 0.58, totalBoardSpan + 0.28);
+            const trimMesh = new THREE.Mesh(trimGeo, materials3D.trim);
+            trimMesh.position.y = -0.31;
+            boardGroup.add(trimMesh);
+
+            // Engraved "AMAN CHESS" Nameplates on Front (+Z) and Back (-Z) Frame Sides
+            const plaqueTex = createLabelTexture('♔ AMAN CHESS 3D ♔', '#d97706', '#0f172a', 512, 64, 34);
+            const plaqueMat = new THREE.MeshStandardMaterial({ map: plaqueTex, roughness: 0.25, metalness: 0.65 });
+            const plaqueGeo = new THREE.PlaneGeometry(3.2, 0.34);
+
+            const frontPlaque = new THREE.Mesh(plaqueGeo, plaqueMat);
+            frontPlaque.position.set(0, -0.28, (totalBoardSpan + 1.51) / 2);
+            boardGroup.add(frontPlaque);
+
+            const backPlaque = new THREE.Mesh(plaqueGeo, plaqueMat);
+            backPlaque.position.set(0, -0.28, -(totalBoardSpan + 1.51) / 2);
+            backPlaque.rotation.y = Math.PI;
+            boardGroup.add(backPlaque);
+
+            // Coordinate Labels along the 3D frame border
+            const files = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+            const coordGeo = new THREE.PlaneGeometry(0.42, 0.42);
+
+            for (let i = 0; i < 8; i++) {
+                // Files A-H on bottom & top borders
+                const fileTex = createLabelTexture(files[i], null, '#fbbf24', 128, 128, 72);
+                const fileMat = new THREE.MeshBasicMaterial({ map: fileTex, transparent: true });
+
+                const posX = i * SQ_SIZE - BOARD_OFFSET;
+                const bottomLabel = new THREE.Mesh(coordGeo, fileMat);
+                bottomLabel.rotation.x = -Math.PI / 2;
+                bottomLabel.position.set(posX, -0.03, BOARD_OFFSET + SQ_SIZE * 0.72);
+                boardGroup.add(bottomLabel);
+
+                const topLabel = new THREE.Mesh(coordGeo, fileMat);
+                topLabel.rotation.x = -Math.PI / 2;
+                topLabel.rotation.z = Math.PI;
+                topLabel.position.set(posX, -0.03, -BOARD_OFFSET - SQ_SIZE * 0.72);
+                boardGroup.add(topLabel);
+
+                // Ranks 8..1 on left & right borders
+                const rankStr = String(8 - i);
+                const rankTex = createLabelTexture(rankStr, null, '#fbbf24', 128, 128, 72);
+                const rankMat = new THREE.MeshBasicMaterial({ map: rankTex, transparent: true });
+
+                const posZ = i * SQ_SIZE - BOARD_OFFSET;
+                const leftLabel = new THREE.Mesh(coordGeo, rankMat);
+                leftLabel.rotation.x = -Math.PI / 2;
+                leftLabel.position.set(-BOARD_OFFSET - SQ_SIZE * 0.72, -0.03, posZ);
+                boardGroup.add(leftLabel);
+
+                const rightLabel = new THREE.Mesh(coordGeo, rankMat);
+                rightLabel.rotation.x = -Math.PI / 2;
+                rightLabel.rotation.z = Math.PI;
+                rightLabel.position.set(BOARD_OFFSET + SQ_SIZE * 0.72, -0.03, posZ);
+                boardGroup.add(rightLabel);
+            }
+
+            // 64 Interactive 3D Board Squares
+            const sqGeo = new THREE.BoxGeometry(SQ_SIZE, 0.14, SQ_SIZE);
+            for (let r = 0; r < 8; r++) {
+                for (let c = 0; c < 8; c++) {
+                    const isLight = (r + c) % 2 === 0;
+                    const sqMesh = new THREE.Mesh(sqGeo, isLight ? materials3D.lightSq : materials3D.darkSq);
+                    const { x, z } = boardToWorld(r, c);
+                    sqMesh.position.set(x, -0.07, z);
+                    sqMesh.receiveShadow = true;
+                    sqMesh.userData = { r, c };
+                    squaresGroup.add(sqMesh);
+                    squareMeshes[r][c] = sqMesh;
+                }
+            }
+        }
+
+        function sync3DPiecesWithBoard(animateMove = null) {
+            if (!piecesGroup) return;
+
+            while (piecesGroup.children.length) {
+                piecesGroup.remove(piecesGroup.children[0]);
+            }
+            pieceMeshes = Array.from({ length: 8 }, () => Array(8).fill(null));
+
+            for (let r = 0; r < 8; r++) {
+                for (let c = 0; c < 8; c++) {
+                    const p = board[r][c];
+                    if (!p) continue;
+
+                    const meshGroup = createPieceMeshGroup(p);
+                    const { x, z } = boardToWorld(r, c);
+
+                    if (animateMove && animateMove.toR === r && animateMove.toC === c) {
+                        const startWorld = boardToWorld(animateMove.fromR, animateMove.fromC);
+                        meshGroup.position.set(startWorld.x, 0, startWorld.z);
+                        activeMoveAnim = {
+                            mesh: meshGroup,
+                            startX: startWorld.x,
+                            startZ: startWorld.z,
+                            endX: x,
+                            endZ: z,
+                            startTime: performance.now(),
+                            duration: 240
+                        };
+                    } else {
+                        meshGroup.position.set(x, 0, z);
+                    }
+
+                    meshGroup.userData = { r, c, piece: p };
+                    piecesGroup.add(meshGroup);
+                    pieceMeshes[r][c] = meshGroup;
+                }
+            }
+        }
+
+        function sync3DHighlights() {
+            if (!highlightsGroup) return;
+            while (highlightsGroup.children.length) {
+                highlightsGroup.remove(highlightsGroup.children[0]);
+            }
+
+            const tileGeo = new THREE.PlaneGeometry(SQ_SIZE * 0.94, SQ_SIZE * 0.94);
+
+            // 1. Last Move Highlights
+            if (lastMove) {
+                const lastMat = new THREE.MeshBasicMaterial({
+                    color: 0xfacc15,
+                    transparent: true,
+                    opacity: 0.38,
+                    side: THREE.DoubleSide
+                });
+                [
+                    { r: lastMove.fromR, c: lastMove.fromC },
+                    { r: lastMove.toR, c: lastMove.toC }
+                ].forEach(pos => {
+                    const mesh = new THREE.Mesh(tileGeo, lastMat);
+                    const { x, z } = boardToWorld(pos.r, pos.c);
+                    mesh.rotation.x = -Math.PI / 2;
+                    mesh.position.set(x, 0.008, z);
+                    highlightsGroup.add(mesh);
+                });
+            }
+
+            // 2. Selected Piece Highlight
+            if (selectedSquare) {
+                const selMat = new THREE.MeshBasicMaterial({
+                    color: 0x38bdf8,
+                    transparent: true,
+                    opacity: 0.55,
+                    side: THREE.DoubleSide
+                });
+                const mesh = new THREE.Mesh(tileGeo, selMat);
+                const { x, z } = boardToWorld(selectedSquare.r, selectedSquare.c);
+                mesh.rotation.x = -Math.PI / 2;
+                mesh.position.set(x, 0.012, z);
+                highlightsGroup.add(mesh);
+            }
+
+            // 3. King in Check Glowing Red Ring
+            if (isInCheck(board, turn)) {
+                const kingPos = findKing(board, turn);
+                if (kingPos) {
+                    const checkMat = new THREE.MeshBasicMaterial({
+                        color: 0xef4444,
+                        transparent: true,
+                        opacity: 0.72,
+                        side: THREE.DoubleSide
+                    });
+                    const mesh = new THREE.Mesh(tileGeo, checkMat);
+                    const { x, z } = boardToWorld(kingPos.r, kingPos.c);
+                    mesh.rotation.x = -Math.PI / 2;
+                    mesh.position.set(x, 0.015, z);
+                    highlightsGroup.add(mesh);
+                }
+            }
+
+            // 4. Legal Move Indicators (3D Discs for Quiet Moves, Glowing Rings for Captures)
+            const dotGeo = new THREE.CylinderGeometry(0.20, 0.20, 0.05, 24);
+            const dotMat = new THREE.MeshBasicMaterial({ color: 0x10b981, transparent: true, opacity: 0.82 });
+
+            const ringGeo = new THREE.RingGeometry(0.42, 0.55, 28);
+            const ringMat = new THREE.MeshBasicMaterial({
+                color: 0xef4444,
+                transparent: true,
+                opacity: 0.85,
+                side: THREE.DoubleSide
+            });
+
+            legalMovesForSelected.forEach(mv => {
+                const { x, z } = boardToWorld(mv.toR, mv.toC);
+                const isCapture = Boolean(board[mv.toR][mv.toC]) || mv.isEnPassant;
+                if (isCapture) {
+                    const ring = new THREE.Mesh(ringGeo, ringMat);
+                    ring.rotation.x = -Math.PI / 2;
+                    ring.position.set(x, 0.02, z);
+                    highlightsGroup.add(ring);
+                } else {
+                    const dot = new THREE.Mesh(dotGeo, dotMat);
+                    dot.position.set(x, 0.025, z);
+                    highlightsGroup.add(dot);
+                }
+            });
+        }
+
+        function updateCameraFromSpherical() {
+            if (!camera) return;
+            const sinPhi = Math.sin(camSpherical.phi);
+            camera.position.x = camSpherical.radius * sinPhi * Math.sin(camSpherical.theta);
+            camera.position.y = camSpherical.radius * Math.cos(camSpherical.phi);
+            camera.position.z = camSpherical.radius * sinPhi * Math.cos(camSpherical.theta);
+            camera.lookAt(0, 0.2, 0);
+        }
+
+        function setCameraPreset(preset) {
+            if (preset === 'white') {
+                targetSpherical.theta = 0;
+                targetSpherical.phi = 0.92;
+                targetSpherical.radius = 13.8;
+                boardFlipped = false;
+            } else if (preset === 'black') {
+                targetSpherical.theta = Math.PI;
+                targetSpherical.phi = 0.92;
+                targetSpherical.radius = 13.8;
+                boardFlipped = true;
+            } else if (preset === 'overhead') {
+                targetSpherical.theta = boardFlipped ? Math.PI : 0;
+                targetSpherical.phi = 0.08;
+                targetSpherical.radius = 14.5;
+            } else if (preset === 'side') {
+                targetSpherical.theta = Math.PI / 2;
+                targetSpherical.phi = 1.08;
+                targetSpherical.radius = 13.5;
+            }
+            renderPlayerCardsAndCaptures();
+        }
+
+        function resetCameraView() {
+            setCameraPreset(boardFlipped ? 'black' : 'white');
+        }
+
+        function setupOrbitAndRaycastControls(canvas) {
+            let isDragging = false;
+            let pointerDownPos = { x: 0, y: 0 };
+            let prevPointerPos = { x: 0, y: 0 };
+            let dragDistance = 0;
+
+            canvas.addEventListener('pointerdown', (e) => {
+                isDragging = true;
+                dragDistance = 0;
+                pointerDownPos = { x: e.clientX, y: e.clientY };
+                prevPointerPos = { x: e.clientX, y: e.clientY };
+            });
+
+            window.addEventListener('pointermove', (e) => {
+                if (!isDragging) return;
+                const dx = e.clientX - prevPointerPos.x;
+                const dy = e.clientY - prevPointerPos.y;
+                dragDistance += Math.hypot(dx, dy);
+
+                if (dragDistance > 5) {
+                    targetSpherical.theta -= dx * 0.0085;
+                    targetSpherical.phi = Math.max(0.12, Math.min(1.42, targetSpherical.phi - dy * 0.0075));
+                }
+                prevPointerPos = { x: e.clientX, y: e.clientY };
+            });
+
+            window.addEventListener('pointerup', (e) => {
+                if (!isDragging) return;
+                isDragging = false;
+
+                // If minimal movement, treat as a click/tap on the 3D chessboard
+                if (dragDistance <= 7 && e.target === canvas) {
+                    handle3DCanvasClick(e);
+                }
+            });
+
+            canvas.addEventListener('wheel', (e) => {
+                e.preventDefault();
+                targetSpherical.radius = Math.max(8.5, Math.min(21, targetSpherical.radius + e.deltaY * 0.008));
+            }, { passive: false });
+        }
+
+        function handle3DCanvasClick(e) {
+            const canvas = document.getElementById('webglCanvas');
+            const rect = canvas.getBoundingClientRect();
+            mouseNdc.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+            mouseNdc.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+            raycaster.setFromCamera(mouseNdc, camera);
+
+            // Check intersection with pieces or squares
+            const pieceHits = raycaster.intersectObjects(piecesGroup.children, true);
+            if (pieceHits.length > 0) {
+                let obj = pieceHits[0].object;
+                while (obj && obj.parent !== piecesGroup) {
+                    obj = obj.parent;
+                }
+                if (obj && obj.userData && typeof obj.userData.r === 'number') {
+                    onSquareClick(obj.userData.r, obj.userData.c);
+                    return;
+                }
+            }
+
+            const sqHits = raycaster.intersectObjects(squaresGroup.children, false);
+            if (sqHits.length > 0) {
+                const { r, c } = sqHits[0].object.userData;
+                onSquareClick(r, c);
+            }
+        }
+
+        function onViewportResize() {
+            if (!renderer || !camera) return;
+            const container = document.getElementById('viewportContainer');
+            const w = container.clientWidth;
+            const h = container.clientHeight;
+            if (w === 0 || h === 0) return;
+            camera.aspect = w / h;
+            camera.updateProjectionMatrix();
+            renderer.setSize(w, h);
+        }
+
+        function animate3DLoop(now) {
+            requestAnimationFrame(animate3DLoop);
+
+            // Smooth spherical camera interpolation
+            // Normalize shortest angular difference for theta
+            let diffTheta = targetSpherical.theta - camSpherical.theta;
+            while (diffTheta > Math.PI) diffTheta -= Math.PI * 2;
+            while (diffTheta < -Math.PI) diffTheta += Math.PI * 2;
+
+            camSpherical.theta += diffTheta * 0.12;
+            camSpherical.phi += (targetSpherical.phi - camSpherical.phi) * 0.12;
+            camSpherical.radius += (targetSpherical.radius - camSpherical.radius) * 0.12;
+            updateCameraFromSpherical();
+
+            // Parabolic Arc-Jumping Piece Animation
+            if (activeMoveAnim) {
+                const elapsed = now - activeMoveAnim.startTime;
+                const t = Math.min(1, elapsed / activeMoveAnim.duration);
+                const ease = 1 - Math.pow(1 - t, 3);
+
+                activeMoveAnim.mesh.position.x = activeMoveAnim.startX + (activeMoveAnim.endX - activeMoveAnim.startX) * ease;
+                activeMoveAnim.mesh.position.z = activeMoveAnim.startZ + (activeMoveAnim.endZ - activeMoveAnim.startZ) * ease;
+                activeMoveAnim.mesh.position.y = Math.sin(t * Math.PI) * 1.15;
+
+                if (t >= 1) {
+                    activeMoveAnim.mesh.position.y = 0;
+                    activeMoveAnim = null;
+                }
+            }
+
+            if (renderer && scene && camera && renderDimension === '3d') {
+                renderer.render(scene, camera);
+            }
+        }
+
+        /**************************************************************************
+         * 4. POSITIONAL PIECE-SQUARE TABLES & MATERIAL VALUES FOR AMANBOT AI
+         **************************************************************************/
+        const PIECE_VALUES = { P: 100, N: 320, B: 330, R: 500, Q: 900, K: 20000 };
+        const MATERIAL_SIMPLE = { P: 1, N: 3, B: 3, R: 5, Q: 9, K: 0 };
+
+        const PST = {
+            P: [
+                [  0,  0,  0,  0,  0,  0,  0,  0],
+                [ 50, 50, 50, 50, 50, 50, 50, 50],
+                [ 10, 10, 20, 30, 30, 20, 10, 10],
+                [  5,  5, 10, 25, 25, 10,  5,  5],
+                [  0,  0,  0, 20, 20,  0,  0,  0],
+                [  5, -5,-10,  0,  0,-10, -5,  5],
+                [  5, 10, 10,-20,-20, 10, 10,  5],
+                [  0,  0,  0,  0,  0,  0,  0,  0]
+            ],
+            N: [
+                [-50,-40,-30,-30,-30,-30,-40,-50],
+                [-40,-20,  0,  0,  0,  0,-20,-40],
+                [-30,  0, 10, 15, 15, 10,  0,-30],
+                [-30,  5, 15, 20, 20, 15,  5,-30],
+                [-30,  0, 15, 20, 20, 15,  0,-30],
+                [-30,  5, 10, 15, 15, 10,  5,-30],
+                [-40,-20,  0,  5,  5,  0,-20,-40],
+                [-50,-40,-30,-30,-30,-30,-40,-50]
+            ],
+            B: [
+                [-20,-10,-10,-10,-10,-10,-10,-20],
+                [-10,  0,  0,  0,  0,  0,  0,-10],
+                [-10,  0,  5, 10, 10,  5,  0,-10],
+                [-10,  5,  5, 10, 10,  5,  5,-10],
+                [-10,  0, 10, 10, 10, 10,  0,-10],
+                [-10, 10, 10, 10, 10, 10, 10,-10],
+                [-10,  5,  0,  0,  0,  0,  5,-10],
+                [-20,-10,-10,-10,-10,-10,-10,-20]
+            ],
+            R: [
+                [  0,  0,  0,  0,  0,  0,  0,  0],
+                [  5, 10, 10, 10, 10, 10, 10,  5],
+                [ -5,  0,  0,  0,  0,  0,  0, -5],
+                [ -5,  0,  0,  0,  0,  0,  0, -5],
+                [ -5,  0,  0,  0,  0,  0,  0, -5],
+                [ -5,  0,  0,  0,  0,  0,  0, -5],
+                [ -5,  0,  0,  0,  0,  0,  0, -5],
+                [  0,  0,  0,  5,  5,  0,  0,  0]
+            ],
+            Q: [
+                [-20,-10,-10, -5, -5,-10,-10,-20],
+                [-10,  0,  0,  0,  0,  0,  0,-10],
+                [-10,  0,  5,  5,  5,  5,  0,-10],
+                [ -5,  0,  5,  5,  5,  5,  0, -5],
+                [  0,  0,  5,  5,  5,  5,  0, -5],
+                [-10,  5,  5,  5,  5,  5,  0,-10],
+                [-10,  0,  5,  0,  0,  0,  0,-10],
+                [-20,-10,-10, -5, -5,-10,-10,-20]
+            ],
+            K: [
+                [-30,-40,-40,-50,-50,-40,-40,-30],
+                [-30,-40,-40,-50,-50,-40,-40,-30],
+                [-30,-40,-40,-50,-50,-40,-40,-30],
+                [-30,-40,-40,-50,-50,-40,-40,-30],
+                [-20,-30,-30,-40,-40,-30,-30,-20],
+                [-10,-20,-20,-20,-20,-20,-20,-10],
+                [ 20, 20,  0,  0,  0,  0, 20, 20],
+                [ 20, 30, 10,  0,  0, 10, 30, 20]
+            ]
+        };
+
+        /**************************************************************************
+         * 5. CHESS STATE & COMPLETE RULE ENGINE
+         **************************************************************************/
+        const FILES = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+
+        let board = [];
+        let turn = 'w';
+        let castlingRights = { wK: true, wQ: true, bK: true, bQ: true };
+        let enPassantTarget = null;
+        let halfMoveClock = 0;
+        let fullMoveNumber = 1;
+
+        let selectedSquare = null;
+        let legalMovesForSelected = [];
+        let moveHistory = [];
+        let capturedByWhite = [];
+        let capturedByBlack = [];
+        let lastMove = null;
+        let gameOver = false;
+
+        // UI & Mode Configuration
+        let gameMode = 'ai';             // 'ai' or 'pvp'
+        let aiDifficulty = 3;            // 1..4
+        let humanColorChoice = 'w';      // 'w', 'b', or 'random'
+        let humanColor = 'w';
+        let boardFlipped = false;
+        let autoFlipPvP = true;
+        let whitePlayerName = 'Aman';
+        let blackPlayerName = 'Player 2';
+        let aiTimer = null;
+
+        // Chess Clock State
+        let initialClockSeconds = 0;
+        let whiteTimeLeft = 0;
+        let blackTimeLeft = 0;
+        let clockInterval = null;
+
+        function createInitialBoard() {
+            return [
+                ['bR', 'bN', 'bB', 'bQ', 'bK', 'bB', 'bN', 'bR'],
+                ['bP', 'bP', 'bP', 'bP', 'bP', 'bP', 'bP', 'bP'],
+                [null, null, null, null, null, null, null, null],
+                [null, null, null, null, null, null, null, null],
+                [null, null, null, null, null, null, null, null],
+                [null, null, null, null, null, null, null, null],
+                ['wP', 'wP', 'wP', 'wP', 'wP', 'wP', 'wP', 'wP'],
+                ['wR', 'wN', 'wB', 'wQ', 'wK', 'wB', 'wN', 'wR']
+            ];
+        }
+
+        function cloneBoard(b) {
+            return b.map(row => row.slice());
+        }
+
+        function cloneStateSnapshot() {
+            return {
+                board: cloneBoard(board),
+                turn,
+                castlingRights: { ...castlingRights },
+                enPassantTarget: enPassantTarget ? { ...enPassantTarget } : null,
+                halfMoveClock,
+                fullMoveNumber,
+                capturedByWhite: [...capturedByWhite],
+                capturedByBlack: [...capturedByBlack],
+                lastMove: lastMove ? { ...lastMove } : null,
+                whiteTimeLeft,
+                blackTimeLeft,
+                gameOver
+            };
+        }
+
+        function formatClock(seconds) {
+            const s = Math.max(0, Math.ceil(seconds));
+            const mins = Math.floor(s / 60);
+            const secs = s % 60;
+            return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+        }
+
+        function startClockTicker() {
+            clearInterval(clockInterval);
+            if (initialClockSeconds <= 0 || gameOver) return;
+
+            clockInterval = setInterval(() => {
+                if (gameOver) {
+                    clearInterval(clockInterval);
+                    return;
+                }
+                if (turn === 'w') {
+                    whiteTimeLeft = Math.max(0, whiteTimeLeft - 1);
+                    if (whiteTimeLeft === 0) {
+                        handleTimeout('w');
+                        return;
+                    }
+                } else {
+                    blackTimeLeft = Math.max(0, blackTimeLeft - 1);
+                    if (blackTimeLeft === 0) {
+                        handleTimeout('b');
+                        return;
+                    }
+                }
+                renderClocksUI();
+            }, 1000);
+        }
+
+        function handleTimeout(expiredColor) {
+            clearInterval(clockInterval);
+            clearTimeout(aiTimer);
+            gameOver = true;
+            playSound('gameover');
+            const winnerColor = expiredColor === 'w' ? 'b' : 'w';
+            const winnerLabel = getDisplayNameForColor(winnerColor);
+            const loserLabel = getDisplayNameForColor(expiredColor);
+            showGameOverModal('Time Out!', `${loserLabel} ran out of time. ${winnerLabel} wins on time!`, '⏰');
+            renderAll();
+        }
+
+        function getDisplayNameForColor(color) {
+            if (gameMode === 'pvp') {
+                return color === 'w' ? (whitePlayerName || 'Aman (White)') : (blackPlayerName || 'Player 2 (Black)');
+            } else {
+                const levelNames = { 1: 'AmanBot Lite', 2: 'AmanBot Club', 3: 'AmanBot Tactician', 4: 'AmanBot GM' };
+                if (color === humanColor) return 'Aman (' + (color === 'w' ? 'White' : 'Black') + ')';
+                return levelNames[aiDifficulty] + ' (' + (color === 'w' ? 'White' : 'Black') + ')';
+            }
+        }
+
+        function inBounds(r, c) {
+            return r >= 0 && r < 8 && c >= 0 && c < 8;
+        }
+
+        function findKing(b, color) {
+            const target = color + 'K';
+            for (let r = 0; r < 8; r++) {
+                for (let c = 0; c < 8; c++) {
+                    if (b[r][c] === target) return { r, c };
+                }
+            }
+            return null;
+        }
+
+        function isSquareAttacked(b, r, c, attackerColor) {
+            const pawnRowDir = attackerColor === 'w' ? 1 : -1;
+            const pr = r + pawnRowDir;
+            if (inBounds(pr, c - 1) && b[pr][c - 1] === attackerColor + 'P') return true;
+            if (inBounds(pr, c + 1) && b[pr][c + 1] === attackerColor + 'P') return true;
+
+            const knightOffsets = [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]];
+            for (const [dr, dc] of knightOffsets) {
+                const nr = r + dr, nc = c + dc;
+                if (inBounds(nr, nc) && b[nr][nc] === attackerColor + 'N') return true;
+            }
+
+            for (let dr = -1; dr <= 1; dr++) {
+                for (let dc = -1; dc <= 1; dc++) {
+                    if (dr === 0 && dc === 0) continue;
+                    const kr = r + dr, kc = c + dc;
+                    if (inBounds(kr, kc) && b[kr][kc] === attackerColor + 'K') return true;
+                }
+            }
+
+            const orthoDirs = [[-1,0],[1,0],[0,-1],[0,1]];
+            for (const [dr, dc] of orthoDirs) {
+                let nr = r + dr, nc = c + dc;
+                while (inBounds(nr, nc)) {
+                    const p = b[nr][nc];
+                    if (p) {
+                        if (p === attackerColor + 'R' || p === attackerColor + 'Q') return true;
+                        break;
+                    }
+                    nr += dr;
+                    nc += dc;
+                }
+            }
+
+            const diagDirs = [[-1,-1],[-1,1],[1,-1],[1,1]];
+            for (const [dr, dc] of diagDirs) {
+                let nr = r + dr, nc = c + dc;
+                while (inBounds(nr, nc)) {
+                    const p = b[nr][nc];
+                    if (p) {
+                        if (p === attackerColor + 'B' || p === attackerColor + 'Q') return true;
+                        break;
+                    }
+                    nr += dr;
+                    nc += dc;
+                }
+            }
+
+            return false;
+        }
+
+        function isInCheck(b, color) {
+            const kingPos = findKing(b, color);
+            if (!kingPos) return false;
+            const enemy = color === 'w' ? 'b' : 'w';
+            return isSquareAttacked(b, kingPos.r, kingPos.c, enemy);
+        }
+
+        function getPseudoMovesForSquare(b, r, c, rights, epTarget) {
+            const piece = b[r][c];
+            if (!piece) return [];
+            const color = piece[0];
+            const type = piece[1];
+            const enemy = color === 'w' ? 'b' : 'w';
+            const moves = [];
+
+            if (type === 'P') {
+                const dir = color === 'w' ? -1 : 1;
+                const startRow = color === 'w' ? 6 : 1;
+                const promoRow = color === 'w' ? 0 : 7;
+
+                const nr = r + dir;
+                if (inBounds(nr, c) && !b[nr][c]) {
+                    if (nr === promoRow) {
+                        ['Q', 'R', 'B', 'N'].forEach(promo => {
+                            moves.push({ fromR: r, fromC: c, toR: nr, toC: c, promotion: promo });
+                        });
+                    } else {
+                        moves.push({ fromR: r, fromC: c, toR: nr, toC: c });
+                        const nnr = r + dir * 2;
+                        if (r === startRow && !b[nnr][c]) {
+                            moves.push({ fromR: r, fromC: c, toR: nnr, toC: c, isDoublePawn: true });
+                        }
+                    }
+                }
+
+                for (const dc of [-1, 1]) {
+                    const nc = c + dc;
+                    if (!inBounds(nr, nc)) continue;
+                    const target = b[nr][nc];
+                    if (target && target[0] === enemy) {
+                        if (nr === promoRow) {
+                            ['Q', 'R', 'B', 'N'].forEach(promo => {
+                                moves.push({ fromR: r, fromC: c, toR: nr, toC: nc, promotion: promo });
+                            });
+                        } else {
+                            moves.push({ fromR: r, fromC: c, toR: nr, toC: nc });
+                        }
+                    } else if (epTarget && epTarget.r === nr && epTarget.c === nc) {
+                        moves.push({ fromR: r, fromC: c, toR: nr, toC: nc, isEnPassant: true });
+                    }
+                }
+            } else if (type === 'N') {
+                const offsets = [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]];
+                for (const [dr, dc] of offsets) {
+                    const nr = r + dr, nc = c + dc;
+                    if (inBounds(nr, nc) && (!b[nr][nc] || b[nr][nc][0] !== color)) {
+                        moves.push({ fromR: r, fromC: c, toR: nr, toC: nc });
+                    }
+                }
+            } else if (type === 'B' || type === 'R' || type === 'Q') {
+                const dirs = [];
+                if (type === 'B' || type === 'Q') dirs.push([-1,-1],[-1,1],[1,-1],[1,1]);
+                if (type === 'R' || type === 'Q') dirs.push([-1,0],[1,0],[0,-1],[0,1]);
+
+                for (const [dr, dc] of dirs) {
+                    let nr = r + dr, nc = c + dc;
+                    while (inBounds(nr, nc)) {
+                        const target = b[nr][nc];
+                        if (!target) {
+                            moves.push({ fromR: r, fromC: c, toR: nr, toC: nc });
+                        } else {
+                            if (target[0] !== color) {
+                                moves.push({ fromR: r, fromC: c, toR: nr, toC: nc });
+                            }
+                            break;
+                        }
+                        nr += dr;
+                        nc += dc;
+                    }
+                }
+            } else if (type === 'K') {
+                for (let dr = -1; dr <= 1; dr++) {
+                    for (let dc = -1; dc <= 1; dc++) {
+                        if (dr === 0 && dc === 0) continue;
+                        const nr = r + dr, nc = c + dc;
+                        if (inBounds(nr, nc) && (!b[nr][nc] || b[nr][nc][0] !== color)) {
+                            moves.push({ fromR: r, fromC: c, toR: nr, toC: nc });
+                        }
+                    }
+                }
+
+                const homeRow = color === 'w' ? 7 : 0;
+                if (r === homeRow && c === 4 && !isSquareAttacked(b, homeRow, 4, enemy)) {
+                    const canKingside = color === 'w' ? rights.wK : rights.bK;
+                    if (
+                        canKingside &&
+                        b[homeRow][7] === color + 'R' &&
+                        !b[homeRow][5] &&
+                        !b[homeRow][6] &&
+                        !isSquareAttacked(b, homeRow, 5, enemy) &&
+                        !isSquareAttacked(b, homeRow, 6, enemy)
+                    ) {
+                        moves.push({ fromR: homeRow, fromC: 4, toR: homeRow, toC: 6, isCastle: 'K' });
+                    }
+                    const canQueenside = color === 'w' ? rights.wQ : rights.bQ;
+                    if (
+                        canQueenside &&
+                        b[homeRow][0] === color + 'R' &&
+                        !b[homeRow][1] &&
+                        !b[homeRow][2] &&
+                        !b[homeRow][3] &&
+                        !isSquareAttacked(b, homeRow, 3, enemy) &&
+                        !isSquareAttacked(b, homeRow, 2, enemy)
+                    ) {
+                        moves.push({ fromR: homeRow, fromC: 4, toR: homeRow, toC: 2, isCastle: 'Q' });
+                    }
+                }
+            }
+
+            return moves;
+        }
+
+        function applyMoveToState(b, move, rights) {
+            const nextB = cloneBoard(b);
+            const nextRights = { ...rights };
+            let nextEp = null;
+
+            const piece = nextB[move.fromR][move.fromC];
+            const color = piece[0];
+            let captured = nextB[move.toR][move.toC];
+
+            if (move.isEnPassant) {
+                const capRow = color === 'w' ? move.toR + 1 : move.toR - 1;
+                captured = nextB[capRow][move.toC];
+                nextB[capRow][move.toC] = null;
+            }
+
+            nextB[move.toR][move.toC] = move.promotion ? (color + move.promotion) : piece;
+            nextB[move.fromR][move.fromC] = null;
+
+            if (move.isCastle === 'K') {
+                nextB[move.toR][5] = nextB[move.toR][7];
+                nextB[move.toR][7] = null;
+            } else if (move.isCastle === 'Q') {
+                nextB[move.toR][3] = nextB[move.toR][0];
+                nextB[move.toR][0] = null;
+            }
+
+            if (move.isDoublePawn) {
+                nextEp = { r: (move.fromR + move.toR) / 2, c: move.fromC };
+            }
+
+            if (piece === 'wK') { nextRights.wK = false; nextRights.wQ = false; }
+            if (piece === 'bK') { nextRights.bK = false; nextRights.bQ = false; }
+            if (move.fromR === 7 && move.fromC === 0) nextRights.wQ = false;
+            if (move.fromR === 7 && move.fromC === 7) nextRights.wK = false;
+            if (move.fromR === 0 && move.fromC === 0) nextRights.bQ = false;
+            if (move.fromR === 0 && move.fromC === 7) nextRights.bK = false;
+
+            if (move.toR === 7 && move.toC === 0) nextRights.wQ = false;
+            if (move.toR === 7 && move.toC === 7) nextRights.wK = false;
+            if (move.toR === 0 && move.toC === 0) nextRights.bQ = false;
+            if (move.toR === 0 && move.toC === 7) nextRights.bK = false;
+
+            return { board: nextB, castlingRights: nextRights, enPassantTarget: nextEp, captured };
+        }
+
+        function getAllLegalMoves(b, color, rights, epTarget) {
+            const legal = [];
+            for (let r = 0; r < 8; r++) {
+                for (let c = 0; c < 8; c++) {
+                    const p = b[r][c];
+                    if (p && p[0] === color) {
+                        const pseudo = getPseudoMovesForSquare(b, r, c, rights, epTarget);
+                        for (const mv of pseudo) {
+                            const sim = applyMoveToState(b, mv, rights);
+                            if (!isInCheck(sim.board, color)) {
+                                mv.captured = sim.captured;
+                                legal.push(mv);
+                            }
+                        }
+                    }
+                }
+            }
+            return legal;
+        }
+
+        function toAlgebraicNotation(b, move, allLegalBeforeMove, nextBoard, nextTurn) {
+            if (move.isCastle === 'K') return appendCheckSuffix('O-O', nextBoard, nextTurn);
+            if (move.isCastle === 'Q') return appendCheckSuffix('O-O-O', nextBoard, nextTurn);
+
+            const piece = b[move.fromR][move.fromC];
+            const type = piece[1];
+            const destSquare = FILES[move.toC] + (8 - move.toR);
+            const isCapture = Boolean(b[move.toR][move.toC] || move.isEnPassant);
+
+            let san = '';
+            if (type === 'P') {
+                if (isCapture) san += FILES[move.fromC] + 'x';
+                san += destSquare;
+                if (move.promotion) san += '=' + move.promotion;
+            } else {
+                san += type;
+                const ambiguous = allLegalBeforeMove.filter(m =>
+                    (m.fromR !== move.fromR || m.fromC !== move.fromC) &&
+                    m.toR === move.toR &&
+                    m.toC === move.toC &&
+                    b[m.fromR][m.fromC] === piece
+                );
+                if (ambiguous.length > 0) {
+                    const sameFile = ambiguous.some(m => m.fromC === move.fromC);
+                    const sameRank = ambiguous.some(m => m.fromR === move.fromR);
+                    if (!sameFile) san += FILES[move.fromC];
+                    else if (!sameRank) san += (8 - move.fromR);
+                    else san += FILES[move.fromC] + (8 - move.fromR);
+                }
+                if (isCapture) san += 'x';
+                san += destSquare;
+            }
+
+            return appendCheckSuffix(san, nextBoard, nextTurn);
+        }
+
+        function appendCheckSuffix(san, nextBoard, nextTurn) {
+            if (isInCheck(nextBoard, nextTurn)) {
+                const nextLegal = getAllLegalMoves(nextBoard, nextTurn, castlingRights, enPassantTarget);
+                return san + (nextLegal.length === 0 ? '#' : '+');
+            }
+            return san;
+        }
+
+        /**************************************************************************
+         * 6. AMANBOT AI ENGINE (MINIMAX WITH ALPHA-BETA PRUNING)
+         **************************************************************************/
+        function evaluateBoard(b) {
+            let score = 0;
+            for (let r = 0; r < 8; r++) {
+                for (let c = 0; c < 8; c++) {
+                    const p = b[r][c];
+                    if (!p) continue;
+                    const color = p[0];
+                    const type = p[1];
+                    const baseVal = PIECE_VALUES[type];
+                    const pstRow = color === 'w' ? r : (7 - r);
+                    const positional = PST[type][pstRow][c];
+                    if (color === 'w') score += baseVal + positional;
+                    else score -= (baseVal + positional);
+                }
+            }
+            return score;
+        }
+
+        function orderMoves(moves) {
+            return moves.sort((a, b) => {
+                const scoreA = (a.captured ? PIECE_VALUES[a.captured[1]] * 10 : 0) + (a.promotion ? 800 : 0);
+                const scoreB = (b.captured ? PIECE_VALUES[b.captured[1]] * 10 : 0) + (b.promotion ? 800 : 0);
+                return scoreB - scoreA;
+            });
+        }
+
+        function minimax(b, depth, alpha, beta, maximizingPlayer, rights, epTarget) {
+            const currentColor = maximizingPlayer ? 'w' : 'b';
+            const legalMoves = getAllLegalMoves(b, currentColor, rights, epTarget);
+
+            if (legalMoves.length === 0) {
+                if (isInCheck(b, currentColor)) {
+                    return maximizingPlayer ? (-99999 - depth * 100) : (99999 + depth * 100);
+                }
+                return 0;
+            }
+
+            if (depth === 0) return evaluateBoard(b);
+
+            orderMoves(legalMoves);
+
+            if (maximizingPlayer) {
+                let maxEval = -Infinity;
+                for (const mv of legalMoves) {
+                    const sim = applyMoveToState(b, mv, rights);
+                    const ev = minimax(sim.board, depth - 1, alpha, beta, false, sim.castlingRights, sim.enPassantTarget);
+                    if (ev > maxEval) maxEval = ev;
+                    if (ev > alpha) alpha = ev;
+                    if (beta <= alpha) break;
+                }
+                return maxEval;
+            } else {
+                let minEval = Infinity;
+                for (const mv of legalMoves) {
+                    const sim = applyMoveToState(b, mv, rights);
+                    const ev = minimax(sim.board, depth - 1, alpha, beta, true, sim.castlingRights, sim.enPassantTarget);
+                    if (ev < minEval) minEval = ev;
+                    if (ev < beta) beta = ev;
+                    if (beta <= alpha) break;
+                }
+                return minEval;
+            }
+        }
+
+        function computeBestAIMove() {
+            const aiColor = turn;
+            const legalMoves = getAllLegalMoves(board, aiColor, castlingRights, enPassantTarget);
+            if (legalMoves.length === 0) return null;
+
+            if (aiDifficulty === 1) {
+                const captures = legalMoves.filter(m => m.captured);
+                if (captures.length > 0 && Math.random() < 0.65) {
+                    return captures[Math.floor(Math.random() * captures.length)];
+                }
+                return legalMoves[Math.floor(Math.random() * legalMoves.length)];
+            }
+
+            const searchDepth = aiDifficulty;
+            const isMax = aiColor === 'w';
+            let bestMove = legalMoves[0];
+            let bestValue = isMax ? -Infinity : Infinity;
+
+            for (let i = legalMoves.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [legalMoves[i], legalMoves[j]] = [legalMoves[j], legalMoves[i]];
+            }
+            orderMoves(legalMoves);
+
+            let alpha = -Infinity;
+            let beta = Infinity;
+
+            for (const mv of legalMoves) {
+                const sim = applyMoveToState(board, mv, castlingRights);
+                const val = minimax(sim.board, searchDepth - 1, alpha, beta, !isMax, sim.castlingRights, sim.enPassantTarget);
+
+                if (isMax) {
+                    if (val > bestValue) { bestValue = val; bestMove = mv; }
+                    if (val > alpha) alpha = val;
+                } else {
+                    if (val < bestValue) { bestValue = val; bestMove = mv; }
+                    if (val < beta) beta = val;
+                }
+            }
+
+            return bestMove;
+        }
+
+        /**************************************************************************
+         * 7. MOVE EXECUTION & GAME FLOW
+         **************************************************************************/
+        function executeMove(move) {
+            const snapshotBefore = cloneStateSnapshot();
+            const allLegalBefore = getAllLegalMoves(board, turn, castlingRights, enPassantTarget);
+            const movingPiece = board[move.fromR][move.fromC];
+
+            const result = applyMoveToState(board, move, castlingRights);
+            const nextTurn = turn === 'w' ? 'b' : 'w';
+
+            castlingRights = result.castlingRights;
+            enPassantTarget = result.enPassantTarget;
+
+            const san = toAlgebraicNotation(board, move, allLegalBefore, result.board, nextTurn);
+
+            board = result.board;
+            if (result.captured) {
+                if (turn === 'w') capturedByWhite.push(result.captured);
+                else capturedByBlack.push(result.captured);
+            }
+
+            if (movingPiece[1] === 'P' || result.captured) halfMoveClock = 0;
+            else halfMoveClock++;
+
+            if (turn === 'b') fullMoveNumber++;
+            turn = nextTurn;
+            lastMove = { fromR: move.fromR, fromC: move.fromC, toR: move.toR, toC: move.toC };
+            selectedSquare = null;
+            legalMovesForSelected = [];
+
+            moveHistory.push({
+                snapshot: snapshotBefore,
+                san,
+                color: movingPiece[0]
+            });
+
+            const nextLegalMoves = getAllLegalMoves(board, turn, castlingRights, enPassantTarget);
+            const currentlyInCheck = isInCheck(board, turn);
+
+            if (nextLegalMoves.length === 0) {
+                gameOver = true;
+                clearInterval(clockInterval);
+                playSound('gameover');
+                if (currentlyInCheck) {
+                    const winnerColor = turn === 'w' ? 'b' : 'w';
+                    const winnerName = getDisplayNameForColor(winnerColor);
+                    showGameOverModal('Checkmate!', `${winnerName} wins the 3D match by checkmate.`, '🏆');
+                } else {
+                    showGameOverModal('Stalemate!', 'Draw — no legal moves available.', '🤝');
+                }
+            } else if (halfMoveClock >= 100) {
+                gameOver = true;
+                clearInterval(clockInterval);
+                playSound('gameover');
+                showGameOverModal('Draw by 50-Move Rule', '50 consecutive moves without a pawn advance or capture.', '⚖️');
+            } else if (isInsufficientMaterial(board)) {
+                gameOver = true;
+                clearInterval(clockInterval);
+                playSound('gameover');
+                showGameOverModal('Draw!', 'Neither side has sufficient material to force checkmate.', '🤝');
+            } else {
+                if (currentlyInCheck) playSound('check');
+                else if (result.captured) playSound('capture');
+                else playSound('move');
+            }
+
+            // Smooth 3D Camera Auto-Orbit in Pass & Play mode
+            if (!gameOver && gameMode === 'pvp' && autoFlipPvP) {
+                boardFlipped = (turn === 'b');
+                targetSpherical.theta = boardFlipped ? Math.PI : 0;
+            }
+
+            renderAll(lastMove);
+            triggerAIIfNeeded();
+        }
+
+        function isInsufficientMaterial(b) {
+            const pieces = [];
+            for (let r = 0; r < 8; r++) {
+                for (let c = 0; c < 8; c++) {
+                    if (b[r][c]) pieces.push({ type: b[r][c][1], color: b[r][c][0], r, c });
+                }
+            }
+            if (pieces.length === 2) return true;
+            if (pieces.length === 3) {
+                const minor = pieces.find(p => p.type === 'N' || p.type === 'B');
+                if (minor) return true;
+            }
+            return false;
+        }
+
+        function triggerAIIfNeeded() {
+            clearTimeout(aiTimer);
+            const badge = document.getElementById('aiThinkingBadge');
+            if (gameOver || gameMode !== 'ai' || turn === humanColor) {
+                badge.classList.add('hidden');
+                return;
+            }
+
+            badge.classList.remove('hidden');
+            aiTimer = setTimeout(() => {
+                const aiMove = computeBestAIMove();
+                badge.classList.add('hidden');
+                if (aiMove) executeMove(aiMove);
+            }, 300);
+        }
+
+        /**************************************************************************
+         * 8. BOARD INTERACTION & PAWN PROMOTION DIALOG
+         **************************************************************************/
+        function onSquareClick(r, c) {
+            if (gameOver) return;
+            if (gameMode === 'ai' && turn !== humanColor) return;
+
+            const matchingMoves = legalMovesForSelected.filter(m => m.toR === r && m.toC === c);
+            if (selectedSquare && matchingMoves.length > 0) {
+                if (matchingMoves[0].promotion) {
+                    openPromotionDialog(matchingMoves);
+                    return;
+                }
+                executeMove(matchingMoves[0]);
+                return;
+            }
+
+            const clickedPiece = board[r][c];
+            if (clickedPiece && clickedPiece[0] === turn) {
+                selectedSquare = { r, c };
+                const allLegal = getAllLegalMoves(board, turn, castlingRights, enPassantTarget);
+                legalMovesForSelected = allLegal.filter(m => m.fromR === r && m.fromC === c);
+                sync3DHighlights();
+                renderBoard2D();
+            } else {
+                selectedSquare = null;
+                legalMovesForSelected = [];
+                sync3DHighlights();
+                renderBoard2D();
+            }
+        }
+
+        function openPromotionDialog(promotionMoves) {
+            const modal = document.getElementById('promotionModal');
+            const container = document.getElementById('promotionOptions');
+            container.innerHTML = '';
+
+            const color = turn;
+            const labels = { Q: 'Queen', R: 'Rook', B: 'Bishop', N: 'Knight' };
+
+            ['Q', 'R', 'B', 'N'].forEach(type => {
+                const moveObj = promotionMoves.find(m => m.promotion === type);
+                const btn = document.createElement('button');
+                btn.className = 'flex flex-col items-center justify-center p-2.5 rounded-xl bg-slate-800 hover:bg-amber-500/20 border border-slate-700 hover:border-amber-400 transition group';
+                btn.innerHTML = `
+                    <div class="w-12 h-12 flex items-center justify-center group-hover:scale-110 transition">
+                        ${PIECE_SVGS[color + type]}
+                    </div>
+                    <span class="text-[11px] font-semibold text-slate-300 group-hover:text-amber-300 mt-1">${labels[type]}</span>
+                `;
+                btn.onclick = () => {
+                    modal.classList.add('hidden');
+                    modal.classList.remove('flex');
+                    executeMove(moveObj);
+                };
+                container.appendChild(btn);
+            });
+
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        /**************************************************************************
+         * 9. UI RENDERING (3D + 2D BOARD, CAPTURED PIECES, MOVE LOG, STATUS)
+         **************************************************************************/
+        function renderBoard2D() {
+            const boardEl = document.getElementById('chessBoard2D');
+            boardEl.innerHTML = '';
+
+            const kingInCheckPos = isInCheck(board, turn) ? findKing(board, turn) : null;
+
+            for (let displayR = 0; displayR < 8; displayR++) {
+                for (let displayC = 0; displayC < 8; displayC++) {
+                    const r = boardFlipped ? (7 - displayR) : displayR;
+                    const c = boardFlipped ? (7 - displayC) : displayC;
+
+                    const sq = document.createElement('div');
+                    const isLight = (r + c) % 2 === 0;
+                    sq.className = `square ${isLight ? 'light' : 'dark'}`;
+
+                    if (lastMove && ((lastMove.fromR === r && lastMove.fromC === c) || (lastMove.toR === r && lastMove.toC === c))) {
+                        sq.classList.add('last-move');
+                    }
+                    if (selectedSquare && selectedSquare.r === r && selectedSquare.c === c) {
+                        sq.classList.add('selected');
+                    }
+                    if (kingInCheckPos && kingInCheckPos.r === r && kingInCheckPos.c === c) {
+                        sq.classList.add('in-check');
+                    }
+
+                    if (displayC === 0) {
+                        const rankLabel = document.createElement('span');
+                        rankLabel.className = 'coord-rank';
+                        rankLabel.textContent = 8 - r;
+                        sq.appendChild(rankLabel);
+                    }
+                    if (displayR === 7) {
+                        const fileLabel = document.createElement('span');
+                        fileLabel.className = 'coord-file';
+                        fileLabel.textContent = FILES[c];
+                        sq.appendChild(fileLabel);
+                    }
+
+                    const piece = board[r][c];
+                    if (piece) {
+                        sq.insertAdjacentHTML('beforeend', PIECE_SVGS[piece]);
+                    }
+
+                    const isLegalDest = legalMovesForSelected.some(m => m.toR === r && m.toC === c);
+                    if (isLegalDest) {
+                        const isCapture = Boolean(piece) || legalMovesForSelected.some(m => m.toR === r && m.toC === c && m.isEnPassant);
+                        const indicator = document.createElement('div');
+                        indicator.className = isCapture ? 'capture-ring' : 'move-dot';
+                        sq.appendChild(indicator);
+                    }
+
+                    sq.addEventListener('click', () => onSquareClick(r, c));
+                    boardEl.appendChild(sq);
+                }
+            }
+        }
+
+        function renderPlayerCardsAndCaptures() {
+            const topColor = boardFlipped ? 'w' : 'b';
+            const bottomColor = boardFlipped ? 'b' : 'w';
+
+            const topNameEl = document.getElementById('topPlayerName');
+            const bottomNameEl = document.getElementById('bottomPlayerName');
+            const topAvatarEl = document.getElementById('topPlayerAvatar');
+            const bottomAvatarEl = document.getElementById('bottomPlayerAvatar');
+            const topBadgeEl = document.getElementById('topPlayerBadge');
+            const bottomBadgeEl = document.getElementById('bottomPlayerBadge');
+
+            topBadgeEl.textContent = topColor === 'w' ? 'White' : 'Black';
+            bottomBadgeEl.textContent = bottomColor === 'w' ? 'White' : 'Black';
+
+            if (gameMode === 'ai') {
+                const levelNames = { 1: 'AmanBot Lite', 2: 'AmanBot Club', 3: 'AmanBot Tactician', 4: 'AmanBot GM' };
+                if (topColor !== humanColor) {
+                    topNameEl.textContent = levelNames[aiDifficulty];
+                    topAvatarEl.textContent = '🤖';
+                    bottomNameEl.textContent = 'Aman (You)';
+                    bottomAvatarEl.textContent = '👑';
+                } else {
+                    topNameEl.textContent = 'Aman (You)';
+                    topAvatarEl.textContent = '👑';
+                    bottomNameEl.textContent = levelNames[aiDifficulty];
+                    bottomAvatarEl.textContent = '🤖';
+                }
+            } else {
+                const wName = whitePlayerName.trim() || 'Aman';
+                const bName = blackPlayerName.trim() || 'Player 2';
+                topNameEl.textContent = topColor === 'w' ? wName : bName;
+                topAvatarEl.textContent = topColor === 'w' ? '♔' : '♚';
+                bottomNameEl.textContent = bottomColor === 'w' ? wName : bName;
+                bottomAvatarEl.textContent = bottomColor === 'w' ? '♔' : '♚';
+            }
+
+            const topDot = document.getElementById('topTurnDot');
+            const bottomDot = document.getElementById('bottomTurnDot');
+            if (turn === topColor && !gameOver) {
+                topDot.className = 'w-3 h-3 rounded-full bg-emerald-400 shadow-[0_0_10px_#34d399] transition-all duration-300';
+                bottomDot.className = 'w-3 h-3 rounded-full bg-slate-700 transition-all duration-300';
+            } else if (turn === bottomColor && !gameOver) {
+                bottomDot.className = 'w-3 h-3 rounded-full bg-emerald-400 shadow-[0_0_10px_#34d399] transition-all duration-300';
+                topDot.className = 'w-3 h-3 rounded-full bg-slate-700 transition-all duration-300';
+            } else {
+                topDot.className = 'w-3 h-3 rounded-full bg-slate-700';
+                bottomDot.className = 'w-3 h-3 rounded-full bg-slate-700';
+            }
+
+            const sortOrder = { Q: 1, R: 2, B: 3, N: 4, P: 5 };
+            const whiteCaps = [...capturedByWhite].sort((a, b) => sortOrder[a[1]] - sortOrder[b[1]]);
+            const blackCaps = [...capturedByBlack].sort((a, b) => sortOrder[a[1]] - sortOrder[b[1]]);
+
+            const topCaps = topColor === 'w' ? whiteCaps : blackCaps;
+            const bottomCaps = bottomColor === 'w' ? whiteCaps : blackCaps;
+
+            document.getElementById('topCapturedPieces').innerHTML = topCaps
+                .map(p => `<div class="w-5 h-5 inline-block">${PIECE_SVGS[p]}</div>`).join('');
+            document.getElementById('bottomCapturedPieces').innerHTML = bottomCaps
+                .map(p => `<div class="w-5 h-5 inline-block">${PIECE_SVGS[p]}</div>`).join('');
+
+            let whiteMat = 0, blackMat = 0;
+            for (let r = 0; r < 8; r++) {
+                for (let c = 0; c < 8; c++) {
+                    const p = board[r][c];
+                    if (!p) continue;
+                    if (p[0] === 'w') whiteMat += MATERIAL_SIMPLE[p[1]];
+                    else blackMat += MATERIAL_SIMPLE[p[1]];
+                }
+            }
+
+            const diff = whiteMat - blackMat;
+            const topDiffEl = document.getElementById('topMaterialDiff');
+            const bottomDiffEl = document.getElementById('bottomMaterialDiff');
+            topDiffEl.textContent = '';
+            bottomDiffEl.textContent = '';
+
+            if (diff > 0) {
+                if (topColor === 'w') topDiffEl.textContent = `+${diff}`;
+                else bottomDiffEl.textContent = `+${diff}`;
+            } else if (diff < 0) {
+                if (topColor === 'b') topDiffEl.textContent = `+${Math.abs(diff)}`;
+                else bottomDiffEl.textContent = `+${Math.abs(diff)}`;
+            }
+
+            renderClocksUI();
+        }
+
+        function renderClocksUI() {
+            const topClockEl = document.getElementById('topClockDisplay');
+            const bottomClockEl = document.getElementById('bottomClockDisplay');
+
+            if (initialClockSeconds <= 0) {
+                topClockEl.classList.add('hidden');
+                bottomClockEl.classList.add('hidden');
+                return;
+            }
+
+            topClockEl.classList.remove('hidden');
+            bottomClockEl.classList.remove('hidden');
+
+            const topColor = boardFlipped ? 'w' : 'b';
+            const bottomColor = boardFlipped ? 'b' : 'w';
+
+            const topTime = topColor === 'w' ? whiteTimeLeft : blackTimeLeft;
+            const bottomTime = bottomColor === 'w' ? whiteTimeLeft : blackTimeLeft;
+
+            topClockEl.textContent = formatClock(topTime);
+            bottomClockEl.textContent = formatClock(bottomTime);
+
+            const activeClasses = 'px-2.5 py-1 rounded-lg mono font-bold text-sm bg-amber-500/20 border border-amber-500/60 text-amber-300 tracking-wider shadow-sm';
+            const lowTimeClasses = 'px-2.5 py-1 rounded-lg mono font-bold text-sm bg-red-500/20 border border-red-500/60 text-red-300 tracking-wider animate-pulse';
+            const inactiveClasses = 'px-2.5 py-1 rounded-lg mono font-bold text-sm bg-slate-950 border border-slate-800 text-slate-400 tracking-wider';
+
+            if (!gameOver && turn === topColor) {
+                topClockEl.className = topTime <= 20 ? lowTimeClasses : activeClasses;
+                bottomClockEl.className = inactiveClasses;
+            } else if (!gameOver && turn === bottomColor) {
+                bottomClockEl.className = bottomTime <= 20 ? lowTimeClasses : activeClasses;
+                topClockEl.className = inactiveClasses;
+            } else {
+                topClockEl.className = inactiveClasses;
+                bottomClockEl.className = inactiveClasses;
+            }
+        }
+
+        function renderStatusAndHistory() {
+            const turnColorDot = document.getElementById('statusTurnColor');
+            const headline = document.getElementById('statusHeadline');
+            const subtext = document.getElementById('statusSubtext');
+            const checkBadge = document.getElementById('checkAlertBadge');
+            const inCheck = isInCheck(board, turn);
+
+            if (turn === 'w') {
+                turnColorDot.className = 'w-5 h-5 rounded-full bg-white border-2 border-slate-400 shadow-sm shrink-0';
+            } else {
+                turnColorDot.className = 'w-5 h-5 rounded-full bg-slate-950 border-2 border-slate-400 shadow-sm shrink-0';
+            }
+
+            if (gameOver) {
+                checkBadge.classList.add('hidden');
+                if (whiteTimeLeft === 0 && initialClockSeconds > 0) {
+                    headline.textContent = `Time Out — Black Wins!`;
+                    subtext.textContent = 'White flag fell';
+                } else if (blackTimeLeft === 0 && initialClockSeconds > 0) {
+                    headline.textContent = `Time Out — White Wins!`;
+                    subtext.textContent = 'Black flag fell';
+                } else if (inCheck) {
+                    const winnerColor = turn === 'w' ? 'b' : 'w';
+                    headline.textContent = `Checkmate — ${getDisplayNameForColor(winnerColor)} Wins!`;
+                    subtext.textContent = 'Start a new 3D match or undo to continue';
+                } else {
+                    headline.textContent = 'Game Drawn';
+                    subtext.textContent = 'Match concluded in a draw';
+                }
+            } else {
+                const sideName = turn === 'w' ? 'White' : 'Black';
+                if (gameMode === 'pvp') {
+                    const activePlayer = turn === 'w' ? (whitePlayerName.trim() || 'Aman') : (blackPlayerName.trim() || 'Player 2');
+                    headline.textContent = `${activePlayer}'s Turn (${sideName})`;
+                } else {
+                    headline.textContent = `${sideName}'s Turn to Move`;
+                }
+
+                if (inCheck) {
+                    checkBadge.classList.remove('hidden');
+                    subtext.textContent = `${sideName} King is under attack!`;
+                } else {
+                    checkBadge.classList.add('hidden');
+                    subtext.textContent = (gameMode === 'ai' && turn !== humanColor)
+                        ? 'AmanBot AI is calculating best 3D move...'
+                        : 'Click any 3D piece or drag to orbit camera';
+                }
+            }
+
+            const container = document.getElementById('moveHistoryContainer');
+            const countLabel = document.getElementById('moveCountLabel');
+            countLabel.textContent = `${moveHistory.length} ${moveHistory.length === 1 ? 'ply' : 'plies'}`;
+
+            if (moveHistory.length === 0) {
+                container.innerHTML = `<div class="h-full flex items-center justify-center text-slate-600 italic py-10">No moves played yet</div>`;
+            } else {
+                let html = '';
+                for (let i = 0; i < moveHistory.length; i += 2) {
+                    const moveNum = Math.floor(i / 2) + 1;
+                    const whiteMove = moveHistory[i]?.san || '';
+                    const blackMove = moveHistory[i + 1]?.san || '';
+                    const isLatestRow = (i + 2 >= moveHistory.length);
+                    html += `
+                        <div class="grid grid-cols-7 px-3.5 py-1.5 items-center ${isLatestRow ? 'bg-slate-900/90 text-amber-300 font-semibold' : 'text-slate-300'}">
+                            <span class="col-span-1 text-slate-500">${moveNum}.</span>
+                            <span class="col-span-3">${whiteMove}</span>
+                            <span class="col-span-3">${blackMove}</span>
+                        </div>
+                    `;
+                }
+                container.innerHTML = html;
+                container.scrollTop = container.scrollHeight;
+            }
+
+            document.getElementById('undoBtn').disabled = moveHistory.length === 0;
+        }
+
+        function renderAll(animatedMove = null) {
+            sync3DPiecesWithBoard(animatedMove);
+            sync3DHighlights();
+            renderBoard2D();
+            renderPlayerCardsAndCaptures();
+            renderStatusAndHistory();
+        }
+
+        /**************************************************************************
+         * 10. CONTROLS & SETTINGS HANDLERS
+         **************************************************************************/
+        function setRenderDimension(dim) {
+            renderDimension = dim;
+            const btn3D = document.getElementById('view3DBtn');
+            const btn2D = document.getElementById('view2DBtn');
+            const canvas3D = document.getElementById('webglCanvas');
+            const board2D = document.getElementById('chessBoard2D');
+            const camOverlay = document.getElementById('cameraOverlayBar');
+
+            if (dim === '3d') {
+                btn3D.className = 'px-2.5 py-1 rounded-md text-xs font-bold transition bg-amber-500 text-slate-950 shadow';
+                btn2D.className = 'px-2.5 py-1 rounded-md text-xs font-bold transition text-slate-300 hover:text-white';
+                canvas3D.classList.remove('hidden');
+                camOverlay.classList.remove('hidden');
+                board2D.classList.add('hidden');
+                onViewportResize();
+            } else {
+                btn2D.className = 'px-2.5 py-1 rounded-md text-xs font-bold transition bg-amber-500 text-slate-950 shadow';
+                btn3D.className = 'px-2.5 py-1 rounded-md text-xs font-bold transition text-slate-300 hover:text-white';
+                canvas3D.classList.add('hidden');
+                camOverlay.classList.add('hidden');
+                board2D.classList.remove('hidden');
+                renderBoard2D();
+            }
+        }
+
+        function startNewGame() {
+            clearTimeout(aiTimer);
+            clearInterval(clockInterval);
+
+            if (gameMode === 'ai') {
+                if (humanColorChoice === 'random') {
+                    humanColor = Math.random() < 0.5 ? 'w' : 'b';
+                } else {
+                    humanColor = humanColorChoice;
+                }
+                boardFlipped = (humanColor === 'b');
+            } else {
+                boardFlipped = false;
+            }
+
+            targetSpherical.theta = boardFlipped ? Math.PI : 0;
+            targetSpherical.phi = 0.92;
+            targetSpherical.radius = 13.8;
+
+            board = createInitialBoard();
+            turn = 'w';
+            castlingRights = { wK: true, wQ: true, bK: true, bQ: true };
+            enPassantTarget = null;
+            halfMoveClock = 0;
+            fullMoveNumber = 1;
+            selectedSquare = null;
+            legalMovesForSelected = [];
+            moveHistory = [];
+            capturedByWhite = [];
+            capturedByBlack = [];
+            lastMove = null;
+            gameOver = false;
+
+            whiteTimeLeft = initialClockSeconds;
+            blackTimeLeft = initialClockSeconds;
+
+            closeGameOverModal();
+            renderAll();
+            startClockTicker();
+            triggerAIIfNeeded();
+        }
+
+        function undoLastMove() {
+            if (moveHistory.length === 0) return;
+            clearTimeout(aiTimer);
+
+            let stepsToUndo = 1;
+            if (gameMode === 'ai' && turn === humanColor && moveHistory.length >= 2) {
+                stepsToUndo = 2;
+            }
+
+            let targetRecord = null;
+            for (let i = 0; i < stepsToUndo; i++) {
+                if (moveHistory.length > 0) targetRecord = moveHistory.pop();
+            }
+
+            if (targetRecord) {
+                const snap = targetRecord.snapshot;
+                board = cloneBoard(snap.board);
+                turn = snap.turn;
+                castlingRights = { ...snap.castlingRights };
+                enPassantTarget = snap.enPassantTarget ? { ...snap.enPassantTarget } : null;
+                halfMoveClock = snap.halfMoveClock;
+                fullMoveNumber = snap.fullMoveNumber;
+                capturedByWhite = [...snap.capturedByWhite];
+                capturedByBlack = [...snap.capturedByBlack];
+                lastMove = snap.lastMove ? { ...snap.lastMove } : null;
+                whiteTimeLeft = snap.whiteTimeLeft;
+                blackTimeLeft = snap.blackTimeLeft;
+                gameOver = false;
+                selectedSquare = null;
+                legalMovesForSelected = [];
+
+                if (gameMode === 'pvp' && autoFlipPvP) {
+                    boardFlipped = (turn === 'b');
+                    targetSpherical.theta = boardFlipped ? Math.PI : 0;
+                }
+
+                renderAll();
+                startClockTicker();
+            }
+        }
+
+        function flipBoardOrientation() {
+            boardFlipped = !boardFlipped;
+            targetSpherical.theta = boardFlipped ? Math.PI : 0;
+            renderAll();
+        }
+
+        function setBoardTheme(theme) {
+            currentThemeKey = theme;
+            document.body.setAttribute('data-theme', theme);
+            const dropdown = document.getElementById('themeSelectDropdown');
+            if (dropdown && dropdown.value !== theme) dropdown.value = theme;
+
+            if (scene) {
+                buildMaterialsAndBoard3D();
+                sync3DPiecesWithBoard();
+                sync3DHighlights();
+            }
+        }
+
+        function setGameMode(mode) {
+            if (gameMode === mode) return;
+            gameMode = mode;
+
+            const aiBtn = document.getElementById('modeAiBtn');
+            const pvpBtn = document.getElementById('modePvpBtn');
+            const aiPanel = document.getElementById('aiSettingsPanel');
+            const pvpPanel = document.getElementById('pvpSettingsPanel');
+            const headerBadge = document.getElementById('headerModeBadge');
+
+            if (gameMode === 'ai') {
+                aiBtn.className = 'py-2 px-3 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 bg-amber-500 text-slate-950 shadow';
+                pvpBtn.className = 'py-2 px-3 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 text-slate-400 hover:text-slate-200';
+                aiPanel.classList.remove('hidden');
+                aiPanel.classList.add('flex');
+                pvpPanel.classList.add('hidden');
+                pvpPanel.classList.remove('flex');
+                headerBadge.textContent = 'VS AMANBOT AI';
+            } else {
+                pvpBtn.className = 'py-2 px-3 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 bg-amber-500 text-slate-950 shadow';
+                aiBtn.className = 'py-2 px-3 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 text-slate-400 hover:text-slate-200';
+                pvpPanel.classList.remove('hidden');
+                pvpPanel.classList.add('flex');
+                aiPanel.classList.add('hidden');
+                aiPanel.classList.remove('flex');
+                headerBadge.textContent = 'PASS & PLAY 3D (2P)';
+            }
+
+            startNewGame();
+        }
+
+        function onDifficultyChange() {
+            aiDifficulty = parseInt(document.getElementById('aiDifficultySelect').value, 10);
+            renderPlayerCardsAndCaptures();
+        }
+
+        function setPlayerColorChoice(choice) {
+            humanColorChoice = choice;
+            const wBtn = document.getElementById('playWhiteBtn');
+            const rBtn = document.getElementById('playRandomBtn');
+            const bBtn = document.getElementById('playBlackBtn');
+
+            const activeCls = 'py-1.5 px-2 rounded-lg text-xs font-semibold border transition flex items-center justify-center gap-1.5 bg-amber-500/20 border-amber-500 text-amber-300';
+            const inactiveCls = 'py-1.5 px-2 rounded-lg text-xs font-semibold border transition flex items-center justify-center gap-1.5 bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700';
+
+            wBtn.className = choice === 'w' ? activeCls : inactiveCls;
+            rBtn.className = choice === 'random' ? activeCls : inactiveCls;
+            bBtn.className = choice === 'b' ? activeCls : inactiveCls;
+
+            startNewGame();
+        }
+
+        function onPlayerNameInput() {
+            whitePlayerName = document.getElementById('whitePlayerInput').value || 'Aman';
+            blackPlayerName = document.getElementById('blackPlayerInput').value || 'Player 2';
+            renderPlayerCardsAndCaptures();
+            renderStatusAndHistory();
+        }
+
+        function swapPvpNames() {
+            const wInput = document.getElementById('whitePlayerInput');
+            const bInput = document.getElementById('blackPlayerInput');
+            const temp = wInput.value;
+            wInput.value = bInput.value;
+            bInput.value = temp;
+            onPlayerNameInput();
+        }
+
+        function onPassAndPlayOptionChange() {
+            autoFlipPvP = document.getElementById('autoFlipToggle').checked;
+            if (gameMode === 'pvp' && autoFlipPvP) {
+                boardFlipped = (turn === 'b');
+                targetSpherical.theta = boardFlipped ? Math.PI : 0;
+            }
+            renderAll();
+        }
+
+        function onClockSettingChange() {
+            initialClockSeconds = parseInt(document.getElementById('clockSelect').value, 10);
+            startNewGame();
+        }
+
+        function showGameOverModal(title, subtitle, icon) {
+            document.getElementById('gameOverTitle').textContent = title;
+            document.getElementById('gameOverSubtitle').textContent = subtitle;
+            document.getElementById('gameOverIcon').textContent = icon;
+            const modal = document.getElementById('gameOverModal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function closeGameOverModal() {
+            const modal = document.getElementById('gameOverModal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        function openCreatorModal() {
+            const modal = document.getElementById('creatorModal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function closeCreatorModal() {
+            const modal = document.getElementById('creatorModal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        window.onload = function () {
+            initThreeJS();
+            startNewGame();
+            requestAnimationFrame(animate3DLoop);
+        };
+    </script>
+</body>
+</html>
