@@ -736,13 +736,13 @@
         const BOARD_OFFSET = (7 * SQ_SIZE) / 2; // 4.375
         let camSpherical = {
             theta: 0,              // 0 = White side (+Z), Math.PI = Black side (-Z)
-            phi: 0.92,             // Polar angle from Y axis
-            radius: 13.8
+            phi: 0.90,             // Polar angle from Y axis
+            radius: 22.0
         };
         let targetSpherical = {
             theta: 0,
-            phi: 0.92,
-            radius: 13.8
+            phi: 0.90,
+            radius: 22.0
         };
 
         // Active 3D Piece Move Animation State
@@ -1006,6 +1006,11 @@
             setupOrbitAndRaycastControls(canvas);
 
             window.addEventListener('resize', onViewportResize);
+            if (window.ResizeObserver) {
+                const ro = new ResizeObserver(() => onViewportResize());
+                ro.observe(container);
+            }
+            onViewportResize();
         }
 
         function buildMaterialsAndBoard3D() {
@@ -1270,22 +1275,22 @@
         function setCameraPreset(preset) {
             if (preset === 'white') {
                 targetSpherical.theta = 0;
-                targetSpherical.phi = 0.92;
-                targetSpherical.radius = 13.8;
+                targetSpherical.phi = 0.90;
+                targetSpherical.radius = 22.0;
                 boardFlipped = false;
             } else if (preset === 'black') {
                 targetSpherical.theta = Math.PI;
-                targetSpherical.phi = 0.92;
-                targetSpherical.radius = 13.8;
+                targetSpherical.phi = 0.90;
+                targetSpherical.radius = 22.0;
                 boardFlipped = true;
             } else if (preset === 'overhead') {
                 targetSpherical.theta = boardFlipped ? Math.PI : 0;
-                targetSpherical.phi = 0.08;
-                targetSpherical.radius = 14.5;
+                targetSpherical.phi = 0.05;
+                targetSpherical.radius = 19.5;
             } else if (preset === 'side') {
                 targetSpherical.theta = Math.PI / 2;
-                targetSpherical.phi = 1.08;
-                targetSpherical.radius = 13.5;
+                targetSpherical.phi = 1.05;
+                targetSpherical.radius = 22.5;
             }
             renderPlayerCardsAndCaptures();
         }
@@ -1299,16 +1304,37 @@
             let pointerDownPos = { x: 0, y: 0 };
             let prevPointerPos = { x: 0, y: 0 };
             let dragDistance = 0;
+            const activePointers = new Map();
+            let prevPinchDist = null;
 
             canvas.addEventListener('pointerdown', (e) => {
-                isDragging = true;
-                dragDistance = 0;
-                pointerDownPos = { x: e.clientX, y: e.clientY };
-                prevPointerPos = { x: e.clientX, y: e.clientY };
+                activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+                if (activePointers.size === 1) {
+                    isDragging = true;
+                    dragDistance = 0;
+                    pointerDownPos = { x: e.clientX, y: e.clientY };
+                    prevPointerPos = { x: e.clientX, y: e.clientY };
+                } else if (activePointers.size === 2) {
+                    const pts = Array.from(activePointers.values());
+                    prevPinchDist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+                }
             });
 
             window.addEventListener('pointermove', (e) => {
-                if (!isDragging) return;
+                if (!activePointers.has(e.pointerId)) return;
+                activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+                if (activePointers.size === 2 && prevPinchDist) {
+                    const pts = Array.from(activePointers.values());
+                    const currentDist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+                    const diff = prevPinchDist - currentDist;
+                    targetSpherical.radius = Math.max(10.0, Math.min(32.0, targetSpherical.radius + diff * 0.05));
+                    prevPinchDist = currentDist;
+                    dragDistance += 50; // prevent false square clicks after pinching
+                    return;
+                }
+
+                if (!isDragging || activePointers.size !== 1) return;
                 const dx = e.clientX - prevPointerPos.x;
                 const dy = e.clientY - prevPointerPos.y;
                 dragDistance += Math.hypot(dx, dy);
@@ -1320,19 +1346,25 @@
                 prevPointerPos = { x: e.clientX, y: e.clientY };
             });
 
-            window.addEventListener('pointerup', (e) => {
-                if (!isDragging) return;
-                isDragging = false;
-
-                // If minimal movement, treat as a click/tap on the 3D chessboard
-                if (dragDistance <= 7 && e.target === canvas) {
-                    handle3DCanvasClick(e);
+            function onPointerEnd(e) {
+                activePointers.delete(e.pointerId);
+                if (activePointers.size < 2) {
+                    prevPinchDist = null;
                 }
-            });
+                if (activePointers.size === 0 && isDragging) {
+                    isDragging = false;
+                    if (dragDistance <= 7 && e.target === canvas) {
+                        handle3DCanvasClick(e);
+                    }
+                }
+            }
+
+            window.addEventListener('pointerup', onPointerEnd);
+            window.addEventListener('pointercancel', onPointerEnd);
 
             canvas.addEventListener('wheel', (e) => {
                 e.preventDefault();
-                targetSpherical.radius = Math.max(8.5, Math.min(21, targetSpherical.radius + e.deltaY * 0.008));
+                targetSpherical.radius = Math.max(10.0, Math.min(32.0, targetSpherical.radius + e.deltaY * 0.01));
             }, { passive: false });
         }
 
@@ -1371,6 +1403,13 @@
             const h = container.clientHeight;
             if (w === 0 || h === 0) return;
             camera.aspect = w / h;
+            if (camera.aspect < 1) {
+                const baseFovRad = 40 * Math.PI / 180;
+                const targetTan = Math.tan(baseFovRad / 2);
+                camera.fov = 2 * Math.atan(targetTan / camera.aspect) * (180 / Math.PI);
+            } else {
+                camera.fov = 40;
+            }
             camera.updateProjectionMatrix();
             renderer.setSize(w, h);
         }
@@ -2496,8 +2535,8 @@
             }
 
             targetSpherical.theta = boardFlipped ? Math.PI : 0;
-            targetSpherical.phi = 0.92;
-            targetSpherical.radius = 13.8;
+            targetSpherical.phi = 0.90;
+            targetSpherical.radius = 22.0;
 
             board = createInitialBoard();
             turn = 'w';
